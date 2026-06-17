@@ -111,6 +111,12 @@ MODEL_DIR = settings.models_dir
 RAW_DIR = settings.data_raw_dir
 SYMBOLS = settings.default_symbols
 TITLE = settings.dashboard_title
+SYMBOL_DISPLAY: dict[str, str] = {
+    "BTC-USD": "Bitcoin",
+    "ETH-USD": "Ethereum",
+    "^NSEI": "Nifty 50",
+    "RELIANCE.NS": "Reliance",
+}
 
 if "symbol" not in st.session_state:
     st.session_state.symbol = SYMBOLS[0]
@@ -161,6 +167,23 @@ def _list_symbols_with_data() -> list[str]:
     if not RAW_DIR.exists():
         return []
     return sorted(p.stem for p in RAW_DIR.glob("*.parquet"))
+
+
+@st.cache_data(ttl=60)
+def _asset_model_count(symbol: str) -> int:
+    if not MODEL_DIR.exists():
+        return 0
+    safe = symbol.replace("^", "_").replace(".", "_")
+    return len(list(MODEL_DIR.glob(f"{safe}_*.joblib")))
+
+
+@st.cache_data(ttl=60)
+def _pipeline_status(symbol: str) -> dict[str, int]:
+    raw = _count_parquet_rows(RAW_DIR / f"{symbol}.parquet")
+    feats = _load_feature_count(symbol)
+    labels = _load_label_count(symbol)
+    models = _asset_model_count(symbol)
+    return {"raw": raw, "features": feats, "labels": labels, "models": models}
 
 
 @st.cache_data(ttl=60)
@@ -225,18 +248,33 @@ def page_home() -> None:
                 prev_c = float(df["close"].iloc[-2]) if len(df) > 1 else last_c
                 chg = ((last_c - prev_c) / prev_c) * 100
                 cls = "pos" if chg >= 0 else "neg"
+                status = _pipeline_status(sym)
+                display = SYMBOL_DISPLAY.get(sym, sym)
                 with cols[ci]:
+                    raw_ok = status["raw"] > 0
+                    feat_ok = status["features"] > 0
+                    lbl_ok = status["labels"] > 0
+                    pipe_info = (
+                        f"{'✅' if raw_ok else '⬜'} {status['raw']:,} rows | "
+                        f"{'✅' if feat_ok else '⬜'} {status['features']:,} feats | "
+                        f"{'✅' if lbl_ok else '⬜'} {status['labels']:,} labels | "
+                        f"{status['models']} models"
+                    )
+                    chg_sign = "+" if chg >= 0 else ""
                     st.markdown(
                         f'<div class="asset-card">'
-                        f'<div class="asset-symbol">{sym}</div>'
+                        f'<div class="asset-symbol">{display}</div>'
+                        f'<div style="font-size:0.75rem;color:#888;">{sym}</div>'
                         f'<div class="asset-price">${last_c:,.2f}</div>'
-                        f'<div class="asset-change {cls}">{"+" if chg >= 0 else ""}{chg:.2f}%</div>'
-                        f"</div>",
+                        f'<div class="asset-change {cls}">{chg_sign}{chg:.2f}%</div>'
+                        f'<hr style="margin:8px 0;border-color:#2a2a4a;">'
+                        f'<div style="font-size:0.75rem;color:#888;">{pipe_info}</div></div>',
                         unsafe_allow_html=True,
                     )
 
     st.markdown("### Quick Navigation")
     nav_items = [
+        ("\U0001f4e6", "Data Pipeline", "Ingest, compute features, and generate labels per asset"),
         ("\U0001f4ca", "Market Overview", "Interactive OHLCV charts with zoom and range selectors"),
         ("\U0001f916", "Predictions", "Date-range prediction with confidence gauges"),
         ("\U0001f4c8", "Model Comparison", "Radar charts, leaderboards, feature importance"),
@@ -259,6 +297,144 @@ def page_home() -> None:
                     )
 
     st.caption(f"Data directory: {RAW_DIR}")
+
+
+# ── Page: Data Pipeline ────────────────────────────────────────────────────────
+
+
+def _run_ingest(symbol: str) -> str | None:
+    from datetime import datetime
+
+    from ai_candle_predictor.application.dto.market_data import MarketDataRequest
+    from ai_candle_predictor.application.use_cases.ingest_market_data import (
+        ingest_market_data,
+    )
+    from ai_candle_predictor.infrastructure.data.yahoo_provider import YahooProvider
+    from ai_candle_predictor.infrastructure.persistence.parquet_store import ParquetStore
+
+    start = datetime.strptime(settings.default_start_date, "%Y-%m-%d")
+    request = MarketDataRequest(symbol=symbol, start_date=start, end_date=datetime.now())
+    provider = YahooProvider()
+    storage = ParquetStore()
+    result = ingest_market_data(request, provider, storage)
+    return f"Ingested {result.rows_valid:,} rows for {symbol}"
+
+
+def _run_features(symbol: str) -> str | None:
+    from ai_candle_predictor.application.use_cases.compute_features import compute_features
+    from ai_candle_predictor.infrastructure.features.parquet_feature_store import (
+        ParquetFeatureStore,
+    )
+    from ai_candle_predictor.infrastructure.persistence.parquet_store import ParquetStore
+
+    fs = ParquetFeatureStore()
+    storage = ParquetStore()
+    count = compute_features(Symbol(symbol), storage, fs)
+    return f"Computed {count:,} feature rows for {symbol}"
+
+
+def _run_labels(symbol: str) -> str | None:
+    from ai_candle_predictor.application.use_cases.generate_labels import (
+        generate_labels_for_symbol,
+    )
+    from ai_candle_predictor.infrastructure.labeling.parquet_label_store import (
+        ParquetLabelStore,
+    )
+    from ai_candle_predictor.infrastructure.persistence.parquet_store import ParquetStore
+
+    ls = ParquetLabelStore()
+    storage = ParquetStore()
+    stats = generate_labels_for_symbol(Symbol(symbol), storage, ls)
+    return (
+        f"Generated {stats['total']:,} labels "
+        f"({stats['up']} UP / {stats['down']} DOWN) for {symbol}"
+    )
+
+
+def _asset_pipeline_card(symbol: str) -> None:
+    display = SYMBOL_DISPLAY.get(symbol, symbol)
+    status = _pipeline_status(symbol)
+
+    st.markdown(
+        f'<div class="asset-card" style="padding:20px;">'
+        f'<div style="display:flex;justify-content:space-between;align-items:center;">'
+        f'<div><span class="asset-symbol">{display}</span>'
+        f'<span style="font-size:0.75rem;color:#888;margin-left:8px;">{symbol}</span></div>'
+        f"</div>"
+        f'<div style="display:flex;gap:24px;margin:12px 0;font-size:0.85rem;">'
+        f'<div>{"✅" if status["raw"] > 0 else "⬜"} Raw: {status["raw"]:,}</div>'
+        f'<div>{"✅" if status["features"] > 0 else "⬜"} Features: {status["features"]:,}</div>'
+        f'<div>{"✅" if status["labels"] > 0 else "⬜"} Labels: {status["labels"]:,}</div>'
+        f"<div>Models: {status['models']}</div>"
+        f"</div></div>",
+        unsafe_allow_html=True,
+    )
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        ingest_btn = st.button("📥 Ingest Data", key=f"pipe_ingest_{symbol}")
+    with c2:
+        feat_btn = st.button("⚙️ Compute Features", key=f"pipe_feat_{symbol}")
+    with c3:
+        label_btn = st.button("🏷️ Generate Labels", key=f"pipe_label_{symbol}")
+
+    msg_placeholder = st.empty()
+    for btn, label, fn in [
+        (ingest_btn, "Ingesting", _run_ingest),
+        (feat_btn, "Computing features", _run_features),
+        (label_btn, "Generating labels", _run_labels),
+    ]:
+        if btn:
+            with st.spinner(f"{label} for {display}..."):
+                try:
+                    st.cache_data.clear()
+                    result = fn(symbol)
+                    msg_placeholder.success(result)
+                except Exception as e:
+                    msg_placeholder.error(f"Failed: {e}")
+
+
+def page_data_pipeline() -> None:
+    st.markdown('<p class="main-header">\U0001f4e6 Data Pipeline</p>', unsafe_allow_html=True)
+    st.markdown(
+        '<p class="sub-header">Ingest, compute features, and generate labels for all assets</p>',
+        unsafe_allow_html=True,
+    )
+    st.divider()
+
+    top1, top2, top3 = st.columns(3)
+    with top1:
+        batch_ingest = st.button("📥 Ingest All Assets", type="primary", use_container_width=True)
+    with top2:
+        batch_feat = st.button("⚙️ Features All Assets", type="primary", use_container_width=True)
+    with top3:
+        batch_label = st.button("🏷️ Labels All Assets", type="primary", use_container_width=True)
+
+    batch_placeholder = st.empty()
+    if batch_ingest or batch_feat or batch_label:
+        action = _run_ingest if batch_ingest else (_run_features if batch_feat else _run_labels)
+        action_label = (
+            "Ingesting"
+            if batch_ingest
+            else ("Computing features" if batch_feat else "Generating labels")
+        )
+        for sym in SYMBOLS:
+            display = SYMBOL_DISPLAY.get(sym, sym)
+            with st.spinner(f"{action_label} {display}..."):
+                try:
+                    st.cache_data.clear()
+                    result = action(sym)
+                    batch_placeholder.info(result)
+                except Exception as e:
+                    batch_placeholder.error(f"{display}: {e}")
+                    break
+        st.success("Batch operation complete!")
+        st.rerun()
+
+    stepper = st.checkbox("Expand per-asset controls", value=False)
+    if stepper:
+        for sym in SYMBOLS:
+            _asset_pipeline_card(sym)
 
 
 # ── Page: Market Overview ────────────────────────────────────────────────────
@@ -1489,6 +1665,7 @@ def page_about() -> None:
 nav = st.navigation(
     [
         st.Page(page_home, title="Home", icon="\U0001f3e0", default=True),
+        st.Page(page_data_pipeline, title="Data Pipeline", icon="\U0001f4e6"),
         st.Page(page_market_overview, title="Market Overview", icon="\U0001f4ca"),
         st.Page(page_predictions, title="Predictions", icon="\U0001f916"),
         st.Page(page_model_comparison, title="Model Comparison", icon="\U0001f4c8"),
