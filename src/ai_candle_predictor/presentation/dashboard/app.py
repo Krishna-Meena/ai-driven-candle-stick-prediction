@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, ParamSpec, TypeVar, cast
 
 import streamlit as st
 
@@ -18,6 +19,14 @@ from ai_candle_predictor.infrastructure.features.parquet_feature_store import (
 from ai_candle_predictor.infrastructure.labeling.parquet_label_store import (
     ParquetLabelStore,
 )
+
+P = ParamSpec("P")
+R = TypeVar("R")
+
+
+def _typed_cache_data(*, ttl: int) -> Callable[[Callable[P, R]], Callable[P, R]]:
+    return cast(Callable[[Callable[P, R]], Callable[P, R]], st.cache_data(ttl=ttl))
+
 
 st.set_page_config(
     page_title=settings.dashboard_title,
@@ -118,7 +127,7 @@ if "symbol" not in st.session_state:
 # ── Cached helpers ──────────────────────────────────────────────────────────
 
 
-@st.cache_data(ttl=60)
+@_typed_cache_data(ttl=60)
 def _count_parquet_rows(path: Path) -> int:
     if not path.exists():
         return 0
@@ -128,35 +137,35 @@ def _count_parquet_rows(path: Path) -> int:
     return len(df)
 
 
-@st.cache_data(ttl=60)
+@_typed_cache_data(ttl=60)
 def _load_feature_count(symbol: str) -> int:
     fs = ParquetFeatureStore()
     feats = fs.load(Symbol(symbol))
     return len(feats) if feats else 0
 
 
-@st.cache_data(ttl=60)
+@_typed_cache_data(ttl=60)
 def _load_label_count(symbol: str) -> int:
     ls = ParquetLabelStore()
     labels = ls.load(Symbol(symbol))
     return len(labels) if labels else 0
 
 
-@st.cache_data(ttl=60)
+@_typed_cache_data(ttl=60)
 def _count_models() -> int:
     if not MODEL_DIR.exists():
         return 0
     return len(list(MODEL_DIR.glob("*.joblib")))
 
 
-@st.cache_data(ttl=60)
+@_typed_cache_data(ttl=60)
 def _list_models() -> list[str]:
     if not MODEL_DIR.exists():
         return []
     return sorted(str(p.name) for p in MODEL_DIR.glob("*.joblib"))
 
 
-@st.cache_data(ttl=60)
+@_typed_cache_data(ttl=60)
 def _list_symbols_with_data() -> list[str]:
     if not RAW_DIR.exists():
         return []
