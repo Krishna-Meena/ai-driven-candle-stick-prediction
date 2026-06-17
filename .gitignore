@@ -1,0 +1,98 @@
+# ─── Python ───────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# ─── Virtual Environment ─────────────────────────────────
+.venv/
+venv/
+env/
+.uv/
+
+# ─── IDE & Editors ───────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ─── Environment Variables ──────────────────────────────
+.env
+.env.local
+.env.production
+
+# ─── Data ────────────────────────────────────────────────
+data/raw/*
+data/processed/*
+data/external/*
+data/interim/*
+!data/**/.gitkeep
+
+# ─── Models ──────────────────────────────────────────────
+models/**/*.pkl
+models/**/*.joblib
+models/**/*.onnx
+models/**/*.pt
+models/**/*.h5
+models/**/*.keras
+!models/**/.gitkeep
+
+# ─── Notebooks ───────────────────────────────────────────
+notebooks/.ipynb_checkpoints/
+notebooks/**/*.csv
+notebooks/**/*.parquet
+notebooks/**/*.pkl
+
+# ─── Reports & Figures ──────────────────────────────────
+reports/**/*.png
+reports/**/*.pdf
+reports/**/*.html
+reports/**/*.csv
+!reports/**/.gitkeep
+
+# ─── MLflow ─────────────────────────────────────────────
+mlruns/
+mlartifacts/
+
+# ─── Logs ────────────────────────────────────────────────
+logs/
+*.log
+
+# ─── Testing ─────────────────────────────────────────────
+.coverage
+coverage/
+.coverage.*
+htmlcov/
+.pytest_cache/
+test-results/
+
+# ─── Docker ──────────────────────────────────────────────
+.docker/
+docker-compose.override.yml
+
+# ─── OS ──────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.desktop
+*.lnk
+
+# ─── Mypy ────────────────────────────────────────────────
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# ─── Ruff ────────────────────────────────────────────────
+.ruff_cache/
+
+# ─── Misc ───────────────────────────────────────────────
+*.tmp
+*.bak
+*.orig

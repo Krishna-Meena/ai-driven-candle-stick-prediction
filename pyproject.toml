@@ -1,0 +1,120 @@
+[project]
+name = "ai-candle-predictor"
+version = "0.1.0"
+description = "Production-grade AI-driven candlestick prediction platform"
+requires-python = ">=3.13"
+authors = [
+    { name = "Your Name", email = "your.email@example.com" },
+]
+license = { text = "MIT" }
+readme = "README.md"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Programming Language :: Python :: 3.13",
+]
+
+dependencies = [
+    "pandas>=2.2",
+    "numpy>=2.0",
+    "pydantic>=2",
+    "pydantic-settings>=2",
+    "structlog>=24",
+    "python-dotenv>=1",
+    "typer>=0.12",
+    "yfinance>=0.2",
+    "tenacity>=9",
+    "pyarrow>=19",
+]
+
+[project.optional-dependencies]
+ml = [
+    "scikit-learn>=1.6",
+    "xgboost>=2.1",
+    "lightgbm>=4.5",
+    "pandas-ta>=0.3",
+    "optuna>=4",
+    "joblib>=1.4",
+    "mlflow>=2.16",
+]
+dl = [
+    "torch>=2.5",
+    "pytorch-forecasting>=0.11",
+]
+api = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+]
+dashboard = [
+    "streamlit>=1.40",
+]
+data = [
+    "ccxt>=4.4",
+    "polars>=1.15",
+]
+db = [
+    "sqlalchemy>=2.0",
+    "asyncpg>=0.30",
+    "alembic>=1.14",
+]
+tasks = [
+    "celery>=5.4",
+    "redis>=5.2",
+]
+quality = [
+    "great-expectations>=1",
+]
+inference = [
+    "onnxruntime>=1.20",
+]
+
+[project.urls]
+Repository = "https://github.com/yourusername/ai-candle-predictor"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+required-version = ">=0.5"
+python-preference = "only-managed"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ai_candle_predictor"]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "SIM", "ARG"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.black]
+line-length = 100
+target-version = ["py313"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pytest-cov>=6",
+    "pytest-xdist>=3",
+    "ruff>=0.8",
+    "black>=24",
+    "mypy>=1.13",
+    "pre-commit>=4",
+]
