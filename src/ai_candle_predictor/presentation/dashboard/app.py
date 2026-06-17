@@ -384,8 +384,6 @@ def page_predictions() -> None:
         st.warning("No trained models found. Train a model first.")
         return
 
-    import pandas as pd
-
     symbol = st.selectbox("Symbol", SYMBOLS, key="pred_symbol")
     model_name = st.selectbox("Model", models, key="pred_model")
 
@@ -443,92 +441,231 @@ def page_predictions() -> None:
         st.warning("No predictions returned for the selected range.")
         return
 
-    import plotly.graph_objects as go
+    import pandas as pd
 
-    labeled = sum(1 for p in result.predictions if p.is_correct is not None)
-    correct = sum(1 for p in result.predictions if p.is_correct is True)
-    acc = correct / labeled * 100 if labeled > 0 else 0.0
-    up_pred = sum(1 for p in result.predictions if p.predicted_direction == 1)
+    df_display = pd.DataFrame(
+        [
+            {
+                "date": p.timestamp,
+                "close": p.close,
+                "pred_direction": p.predicted_direction,
+                "predicted": ("UP" if p.predicted_direction == 1 else "DOWN"),
+                "confidence": p.confidence,
+                "actual_direction": p.actual_direction,
+                "actual": (
+                    "UP"
+                    if p.actual_direction == 1
+                    else "DOWN" if p.actual_direction == 0 else "N/A"
+                ),
+                "correct": (
+                    "\u2713"
+                    if p.is_correct is True
+                    else "\u2717" if p.is_correct is False else "N/A"
+                ),
+                "is_correct": p.is_correct,
+            }
+            for p in result.predictions
+        ]
+    )
 
-    k1, k2, k3, k4 = st.columns(4)
-    with k1:
-        st.metric("Candles", result.total_candles)
-    with k2:
-        st.metric("Labeled", labeled)
-    with k3:
-        st.metric("Accuracy", f"{acc:.1f}%")
-    with k4:
-        st.metric("Predicted UP", up_pred)
+    labeled_df = df_display.dropna(subset=["actual_direction"])
+    labeled = len(labeled_df)
+    correct_count = int(labeled_df["is_correct"].sum())
+    win_rate = correct_count / labeled * 100 if labeled > 0 else 0.0
 
     if labeled > 0:
-        correct_pct = acc / 100.0
-        gauge_color = (
-            "#00d4aa" if correct_pct >= 0.6 else "#ffd700" if correct_pct >= 0.4 else "#ff6b6b"
-        )
-        st.markdown(
-            f"""<div class="gauge-container">
-            <svg width="160" height="100" viewBox="0 0 160 100">
-              <path d="M 20 90 A 60 60 0 0 1 140 90" fill="none" stroke="#2a2a4a" stroke-width="12"
-                    stroke-linecap="round"/>
-              <path d="M 20 90 A 60 60 0 0 1 140 90" fill="none"
-                    stroke="{gauge_color}" stroke-width="12"
-                    stroke-linecap="round"
-                    stroke-dasharray="{188.5 * correct_pct} 188.5"/>
-              <text x="80" y="80" text-anchor="middle" font-size="24" font-weight="700"
-                    fill="{gauge_color}" font-family="Inter, sans-serif">{acc:.0f}%</text>
-            </svg></div>""",
-            unsafe_allow_html=True,
+        from sklearn.metrics import (
+            accuracy_score,
+            f1_score,
+            precision_score,
+            recall_score,
         )
 
-        df_display = pd.DataFrame(
-            [
-                {
-                    "timestamp": p.timestamp,
-                    "close": p.close,
-                    "prediction": ("UP" if p.predicted_direction == 1 else "DOWN"),
-                    "confidence": p.confidence,
-                    "actual_return": p.actual_return,
-                    "actual": (
-                        "UP"
-                        if p.actual_direction == 1
-                        else "DOWN" if p.actual_direction == 0 else "N/A"
-                    ),
-                    "correct": (
-                        "\u2713"
-                        if p.is_correct is True
-                        else "\u2717" if p.is_correct is False else "N/A"
-                    ),
-                }
-                for p in result.predictions
-            ]
-        )
+        y_true = labeled_df["actual_direction"].astype(int)
+        y_pred_labeled = labeled_df["pred_direction"].astype(int)
+        prec = precision_score(y_true, y_pred_labeled, zero_division=0)
+        rec = recall_score(y_true, y_pred_labeled, zero_division=0)
+        f1 = f1_score(y_true, y_pred_labeled, zero_division=0)
+        acc_sk = accuracy_score(y_true, y_pred_labeled)
+    else:
+        prec = rec = f1 = acc_sk = 0.0
 
-    pos_conf = df_display[df_display["actual"] == "UP"]["confidence"]
-    neg_conf = df_display[df_display["actual"] == "DOWN"]["confidence"]
+    k1, k2, k3, k4, k5, k6 = st.columns(6)
+    with k1:
+        st.metric("Win Rate", f"{win_rate:.1f}%")
+    with k2:
+        st.metric("Accuracy", f"{acc_sk:.4f}")
+    with k3:
+        st.metric("Precision", f"{prec:.4f}")
+    with k4:
+        st.metric("Recall", f"{rec:.4f}")
+    with k5:
+        st.metric("F1 Score", f"{f1:.4f}")
+    with k6:
+        st.metric("Predictions", labeled)
 
-    if not pos_conf.empty or not neg_conf.empty:
-        fig_prob = go.Figure()
-        if not pos_conf.empty:
-            fig_prob.add_trace(
-                go.Histogram(x=pos_conf, name="Up (actual)", opacity=0.7, marker_color="#00d4aa")
+    if labeled > 0:
+        import plotly.graph_objects as go
+
+        chart_tabs = st.tabs(["Timeline", "Confidence", "Accuracy Over Range", "Distribution"])
+
+        with chart_tabs[0]:
+            fig_timeline = go.Figure()
+            fig_timeline.add_trace(
+                go.Scatter(
+                    x=df_display["date"],
+                    y=df_display["close"],
+                    mode="lines",
+                    name="Close",
+                    line=dict(color="#888", width=1),
+                )
             )
-        if not neg_conf.empty:
-            fig_prob.add_trace(
-                go.Histogram(x=neg_conf, name="Down (actual)", opacity=0.7, marker_color="#ff6b6b")
+            up_mask = df_display["predicted"] == "UP"
+            down_mask = df_display["predicted"] == "DOWN"
+            fig_timeline.add_trace(
+                go.Scatter(
+                    x=df_display.loc[up_mask, "date"],
+                    y=df_display.loc[up_mask, "close"],
+                    mode="markers",
+                    name="Predicted UP",
+                    marker=dict(color="#00d4aa", size=6, symbol="triangle-up"),
+                )
             )
-        fig_prob.update_layout(
-            barmode="overlay",
-            template="plotly_dark",
-            title="Confidence Distribution by Actual Class",
-            xaxis_title="P(UP)",
-            yaxis_title="Count",
-            margin=dict(l=0, r=0, t=30, b=0),
-        )
-        st.plotly_chart(fig_prob, width="stretch")
+            fig_timeline.add_trace(
+                go.Scatter(
+                    x=df_display.loc[down_mask, "date"],
+                    y=df_display.loc[down_mask, "close"],
+                    mode="markers",
+                    name="Predicted DOWN",
+                    marker=dict(color="#ff6b6b", size=6, symbol="triangle-down"),
+                )
+            )
+            fig_timeline.update_layout(
+                template="plotly_dark",
+                title="Prediction Timeline",
+                xaxis_title="Date",
+                yaxis_title="Price",
+                margin=dict(l=0, r=0, t=30, b=0),
+                hovermode="x unified",
+            )
+            st.plotly_chart(fig_timeline, width="stretch")
 
-    st.markdown("### Predictions by Candle")
-    styled = df_display.style.format(
-        {"close": "${:,.2f}", "confidence": "{:.4f}", "actual_return": "{:+.6f}"}
+        with chart_tabs[1]:
+            fig_conf = go.Figure()
+            fig_conf.add_trace(
+                go.Scatter(
+                    x=df_display["date"],
+                    y=df_display["confidence"],
+                    mode="lines+markers",
+                    name="Confidence",
+                    line=dict(color="#00d4aa", width=2),
+                    marker=dict(
+                        color=df_display["confidence"],
+                        colorscale="tealgrn",
+                        size=5,
+                        showscale=True,
+                        colorbar=dict(title="P(UP)"),
+                    ),
+                )
+            )
+            fig_conf.add_hline(
+                y=0.5,
+                line_dash="dash",
+                line_color="#888",
+                annotation_text="Random (0.5)",
+            )
+            fig_conf.update_layout(
+                template="plotly_dark",
+                title="Confidence Over Time",
+                xaxis_title="Date",
+                yaxis_title="P(UP)",
+                margin=dict(l=0, r=0, t=30, b=0),
+                hovermode="x unified",
+            )
+            st.plotly_chart(fig_conf, width="stretch")
+
+        with chart_tabs[2]:
+            labeled_sorted = labeled_df.sort_values("date").reset_index(drop=True)
+            labeled_sorted["cumulative_accuracy"] = labeled_sorted["is_correct"].expanding().mean()
+            window = min(30, len(labeled_sorted))
+            labeled_sorted["rolling_accuracy"] = (
+                labeled_sorted["is_correct"].rolling(window, min_periods=1).mean()
+            )
+            fig_acc = go.Figure()
+            fig_acc.add_trace(
+                go.Scatter(
+                    x=labeled_sorted["date"],
+                    y=labeled_sorted["cumulative_accuracy"],
+                    mode="lines",
+                    name="Cumulative",
+                    line=dict(color="#00d4aa", width=2),
+                )
+            )
+            fig_acc.add_trace(
+                go.Scatter(
+                    x=labeled_sorted["date"],
+                    y=labeled_sorted["rolling_accuracy"],
+                    mode="lines",
+                    name=f"Rolling ({window})",
+                    line=dict(color="#ffd700", width=2, dash="dot"),
+                )
+            )
+            fig_acc.add_hline(
+                y=0.5,
+                line_dash="dash",
+                line_color="#888",
+                annotation_text="Random (0.5)",
+            )
+            fig_acc.update_layout(
+                template="plotly_dark",
+                title="Accuracy Over Range",
+                xaxis_title="Date",
+                yaxis_title="Accuracy",
+                margin=dict(l=0, r=0, t=30, b=0),
+                hovermode="x unified",
+            )
+            st.plotly_chart(fig_acc, width="stretch")
+
+        with chart_tabs[3]:
+            pos_conf = labeled_df[labeled_df["actual"] == "UP"]["confidence"]
+            neg_conf = labeled_df[labeled_df["actual"] == "DOWN"]["confidence"]
+            fig_dist = go.Figure()
+            if not pos_conf.empty:
+                fig_dist.add_trace(
+                    go.Histogram(
+                        x=pos_conf, name="Up (actual)", opacity=0.7, marker_color="#00d4aa"
+                    )
+                )
+            if not neg_conf.empty:
+                fig_dist.add_trace(
+                    go.Histogram(
+                        x=neg_conf, name="Down (actual)", opacity=0.7, marker_color="#ff6b6b"
+                    )
+                )
+            fig_dist.update_layout(
+                barmode="overlay",
+                template="plotly_dark",
+                title="Confidence Distribution by Actual Class",
+                xaxis_title="P(UP)",
+                yaxis_title="Count",
+                margin=dict(l=0, r=0, t=30, b=0),
+            )
+            st.plotly_chart(fig_dist, width="stretch")
+
+    st.markdown("### Prediction Table")
+    display_cols = ["date", "actual", "predicted", "confidence", "correct"]
+    styled = (
+        df_display[display_cols]
+        .style.format({"confidence": "{:.4f}"})
+        .rename(
+            columns={
+                "date": "Date",
+                "actual": "Actual",
+                "predicted": "Predicted",
+                "confidence": "Confidence",
+                "correct": "Correct/Incorrect",
+            }
+        )
     )
     st.dataframe(styled, width="stretch", height=500)
 
