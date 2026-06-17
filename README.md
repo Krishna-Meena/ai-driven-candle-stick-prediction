@@ -18,7 +18,7 @@ src/
 ├── domain/          Core entities & business rules (zero deps)
 ├── application/     Use cases & orchestration
 ├── infrastructure/  Data providers, DB, model serving
-├── presentation/    FastAPI + Streamlit + CLI
+├── presentation/    Streamlit dashboard + CLI + API stubs
 └── common/          Config, logging, exceptions
 ```
 
@@ -37,13 +37,33 @@ cd ai-candle-predictor
 # Create virtual env & install all deps
 uv sync --group dev
 
-# Activate
-.venv\Scripts\activate
-
-# Run lint & type check
-ruff check src/
-mypy src/
+# Launch the Streamlit dashboard
+uv run streamlit run src/ai_candle_predictor/presentation/dashboard/app.py
 ```
+
+The dashboard opens at `http://localhost:8501` with a professional dark theme.
+
+---
+
+## Dashboard
+
+### Pages
+
+| Page | Description |
+|------|-------------|
+| **Home** | KPI panels (assets tracked, feature rows, labeled samples, trained models), asset overview cards, quick navigation |
+| **Market Overview** | Interactive OHLCV candlestick chart with volume, range presets (1M/3M/6M/YTD/1Y/All), zoom + range slider, expanded raw data table |
+| **Predictions** | Date range selector, confidence gauge (SVG radial), KPI metrics, confidence distribution histogram, full per-candle prediction table |
+| **Model Comparison** | On-demand LR/RF/XGB training with radar chart, performance leaderboard with highlights, top-10 feature importance bar charts per model type |
+| **Explainability** | SHAP visualization gallery (tabs per image), on-demand SHAP analysis with global feature ranking bar chart and sorted importance table |
+| **About** | Tabbed view: Architecture diagram, Pipeline steps, Tech Stack table, System Info metrics |
+
+### Theme
+
+- **Dark professional theme** via `.streamlit/config.toml` (base dark, teal accent `#00d4aa`)
+- **Inter font** for modern typography
+- **CSS customizations**: KPI panels with gradient backgrounds and hover effects, asset cards, badge styling, leaderboard rows, gauge containers
+- **Interactive Plotly charts** with `plotly_dark` template, rangesliders, hover analytics
 
 ---
 
@@ -51,21 +71,40 @@ mypy src/
 
 ```
 ai-candle-predictor/
-├── config/               Environment-specific configuration files
-├── data/                 Data storage (raw, processed, external)
-├── docs/                 Architecture Decision Records and API docs
-├── models/               Serialized model artifacts and registry
-├── notebooks/            EDA and experimentation notebooks
-├── reports/              Generated metrics, figures, and exports
-├── scripts/              One-shot DevOps and utility scripts
-├── src/                  Application source code
-│   ├── domain/           Entities, value objects, domain events
-│   ├── application/      Use cases, ports, DTOs
-│   ├── infrastructure/   Data ingestion, persistence, model serving
-│   ├── presentation/     FastAPI routes, Streamlit pages, CLI commands
-│   └── common/           Configuration, logging, exceptions
-├── tests/                Unit, integration, and end-to-end tests
-└── pyproject.toml        Single source of truth for deps & tooling
+├── .streamlit/            Streamlit theme configuration
+├── config/                Environment-specific configuration files
+├── data/                  Data storage (raw, processed, external)
+├── docs/                  Architecture Decision Records and API docs
+├── models/                Serialized model artifacts and registry
+├── notebooks/             EDA and experimentation notebooks
+├── reports/               Generated metrics, figures, SHAP charts
+├── scripts/               One-shot DevOps and utility scripts
+├── src/                   Application source code
+│   ├── domain/            Entities, value objects, domain events
+│   ├── application/       Use cases, ports, DTOs
+│   ├── infrastructure/    Data ingestion, persistence, model serving
+│   ├── presentation/      Streamlit dashboard, CLI, API stubs
+│   └── common/            Configuration, logging, exceptions
+├── tests/                 Unit, integration, and end-to-end tests
+└── pyproject.toml         Single source of truth for deps & tooling
+```
+
+---
+
+## Pipeline
+
+```
+Data Ingestion (yfinance) → ParquetStore
+    ↓
+Feature Engineering (8 indicators via pandas-ta) → ParquetFeatureStore
+    ↓
+Label Engineering (forward returns, horizon=5) → ParquetLabelStore
+    ↓
+Model Training (LR / RF / XGBoost) → JoblibStore
+    ↓
+Prediction (predict_range use case) → CandlePrediction[]
+    ↓
+Explainability (SHAP global + local) → ImageStore
 ```
 
 ---
@@ -76,16 +115,14 @@ ai-candle-predictor/
 |---|---|
 | Language | Python 3.13 |
 | Packaging | UV |
-| Data | Pandas, NumPy, Polars |
-| ML | Scikit-learn, XGBoost, LightGBM |
-| Deep Learning | PyTorch, PyTorch Forecasting |
-| API | FastAPI, Uvicorn |
-| Dashboard | Streamlit |
-| Database | PostgreSQL, SQLAlchemy, Alembic |
-| Task Queue | Celery, Redis |
-| Experiment Tracking | MLflow |
-| Quality | Ruff, Black, Mypy, Pre-commit |
-| Testing | Pytest, Pytest-cov, Pytest-xdist |
+| Data | Pandas, NumPy, PyArrow, pandas-ta |
+| ML | Scikit-learn, XGBoost, Optuna, SHAP |
+| Visualization | Plotly, Matplotlib, mplfinance |
+| Dashboard | Streamlit (custom dark theme) |
+| Config | pydantic-settings |
+| Logging | structlog |
+| Quality | Ruff, Black, Mypy |
+| Testing | Pytest, Pytest-cov, Pytest-xdist (114 tests) |
 
 ---
 
@@ -95,7 +132,7 @@ ai-candle-predictor/
 # Install dev dependencies
 uv sync --group dev
 
-# Run tests
+# Run tests (114 total)
 pytest
 
 # Run linter
@@ -107,6 +144,15 @@ black src/ tests/
 # Type check
 mypy src/
 ```
+
+---
+
+## CI/CD
+
+GitHub Actions workflow (`.github/workflows/ci.yml`):
+- **lint**: ruff check + black --check + mypy
+- **test**: pytest -n auto with coverage on Python 3.13
+- **build**: uv build via hatchling, wheel artifact uploaded
 
 ---
 

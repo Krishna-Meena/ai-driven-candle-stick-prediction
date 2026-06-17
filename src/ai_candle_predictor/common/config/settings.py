@@ -34,5 +34,8 @@ class Settings(BaseSettings):
     ]
     default_start_date: str = "2020-01-01"
 
+    dashboard_title: str = "AI Candle Predictor"
+    dashboard_theme: Literal["dark", "light"] = "dark"
+
 
 settings = Settings()
