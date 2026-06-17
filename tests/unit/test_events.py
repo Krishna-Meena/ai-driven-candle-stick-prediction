@@ -35,7 +35,7 @@ class TestDataIngested:
             candle_count=1000,
         )
         with pytest.raises((TypeError, AttributeError)):
-            event.candle_count = 999
+            event.candle_count = 999  # type: ignore[misc]
 
 
 class TestDataValidationFailed:
@@ -74,4 +74,4 @@ class TestDataStored:
     def test_immutable(self) -> None:
         event = DataStored(symbol="BTC-USD", path="/data/btc.parquet", row_count=500)
         with pytest.raises((TypeError, AttributeError)):
-            event.row_count = 999
+            event.row_count = 999  # type: ignore[misc]

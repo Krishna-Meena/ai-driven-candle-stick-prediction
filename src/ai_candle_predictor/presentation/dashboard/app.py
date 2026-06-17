@@ -209,8 +209,8 @@ def page_market_overview() -> None:
     with mc3:
         st.metric("To", end)
     with mc4:
-        last_close = float(df["Close"].iloc[-1])
-        prev_close = float(df["Close"].iloc[-2]) if len(df) > 1 else last_close
+        last_close = float(df["close"].iloc[-1])
+        prev_close = float(df["close"].iloc[-2]) if len(df) > 1 else last_close
         pct = ((last_close - prev_close) / prev_close) * 100
         st.metric("Last Close", f"${last_close:,.2f}", f"{pct:+.2f}%")
 
@@ -224,17 +224,17 @@ def page_market_overview() -> None:
     fig.add_trace(
         go.Candlestick(
             x=df.index,
-            open=df["Open"],
-            high=df["High"],
-            low=df["Low"],
-            close=df["Close"],
+            open=df["open"],
+            high=df["high"],
+            low=df["low"],
+            close=df["close"],
             name="OHLC",
         ),
         row=1,
         col=1,
     )
     fig.add_trace(
-        go.Bar(x=df.index, y=df["Volume"], name="Volume", marker_color="rgba(0,212,170,0.3)"),
+        go.Bar(x=df.index, y=df["volume"], name="Volume", marker_color="rgba(0,212,170,0.3)"),
         row=2,
         col=1,
     )
@@ -261,76 +261,142 @@ def page_predictions() -> None:
         st.warning("No trained models found. Train a model first.")
         return
 
+    import pandas as pd
+
     symbol = st.selectbox("Symbol", SYMBOLS, key="pred_symbol")
     model_name = st.selectbox("Model", models, key="pred_model")
 
-    try:
-        import joblib
-
-        pipeline = joblib.load(MODEL_DIR / model_name)
-    except Exception as e:
-        st.error(f"Failed to load model: {e}")
+    raw_path = RAW_DIR / f"{symbol}.parquet"
+    if not raw_path.exists():
+        st.warning("No raw data for this symbol. Run ingestion first.")
         return
 
+    candle_df = pd.read_parquet(raw_path)
+    avail_start = candle_df.index[0]
+    avail_end = candle_df.index[-1]
+
+    col_date1, col_date2 = st.columns(2)
+    with col_date1:
+        start_date = st.date_input(
+            "Start Date",
+            value=avail_start,
+            min_value=avail_start,
+            max_value=avail_end,
+            key="pred_start",
+        )
+    with col_date2:
+        end_date = st.date_input(
+            "End Date",
+            value=avail_end,
+            min_value=avail_start,
+            max_value=avail_end,
+            key="pred_end",
+        )
+
+    if start_date >= end_date:
+        st.error("Start date must be before end date.")
+        return
+
+    model_label = model_name.replace(".joblib", "").replace(f"{symbol}_", "", 1)
+
+    from datetime import datetime
+
+    from ai_candle_predictor.application.use_cases.predict import predict_range
+    from ai_candle_predictor.infrastructure.persistence.parquet_store import ParquetStore
+
+    ps = ParquetStore()
     fs = ParquetFeatureStore()
     ls = ParquetLabelStore()
-    sym = Symbol(symbol)
 
-    features = fs.load(sym)
-    labels = ls.load(sym)
-    if not features or not labels:
-        st.warning("No features or labels for this symbol.")
+    from ai_candle_predictor.infrastructure.models.joblib_store import JoblibStore
+
+    ms = JoblibStore()
+
+    sym = Symbol(symbol)
+    start_dt = datetime.combine(start_date, datetime.min.time())
+    end_dt = datetime.combine(end_date, datetime.max.time())
+
+    with st.spinner("Running predictions..."):
+        result = predict_range(
+            symbol=sym,
+            model_store=ms,
+            feature_store=fs,
+            label_store=ls,
+            candle_store=ps,
+            start_date=start_dt,
+            end_date=end_dt,
+            model_label=model_label,
+        )
+
+    if not result.predictions:
+        st.warning("No predictions returned for the selected range.")
         return
 
-    from ai_candle_predictor.application.use_cases.train_baseline import (
-        _pivot_features,
-        _pivot_labels,
-    )
-
-    feature_df = _pivot_features(features)
-    label_df = _pivot_labels(labels)
-    merged = feature_df.merge(label_df, left_index=True, right_index=True, how="inner")
-
-    X = merged.drop(columns=["label", "forward_return"]).values
-    y = merged["label"].values
-
-    y_prob = pipeline.predict_proba(X)[:, 1]
-    y_pred = pipeline.predict(X)
-
-    results = merged[["forward_return"]].copy()
-    results["probability"] = y_prob
-    results["prediction"] = y_pred
-    results["actual"] = y
-
-    col1, col2 = st.columns(2)
-    with col1:
-        st.metric("Predictions Made", len(results))
-    with col2:
-        correct = int((results["prediction"] == results["actual"]).sum())
-        acc = correct / len(results) * 100
-        st.metric("Accuracy (in-sample)", f"{acc:.1f}%")
+    st.markdown("### Summary")
+    mc1, mc2, mc3, mc4 = st.columns(4)
+    with mc1:
+        st.metric("Candles Predicted", result.total_candles)
+    with mc2:
+        labeled = sum(1 for p in result.predictions if p.is_correct is not None)
+        st.metric("Labeled for Comparison", labeled)
+    with mc3:
+        correct = sum(1 for p in result.predictions if p.is_correct is True)
+        acc = correct / labeled * 100 if labeled > 0 else 0.0
+        st.metric("Correct", f"{correct} ({acc:.1f}%)")
+    with mc4:
+        up_pred = sum(1 for p in result.predictions if p.predicted_direction == 1)
+        st.metric("Predicted UP", up_pred)
 
     import plotly.graph_objects as go
 
-    fig_prob = go.Figure()
-    pos = results[results["actual"] == 1]["probability"]
-    neg = results[results["actual"] == 0]["probability"]
-    fig_prob.add_trace(go.Histogram(x=pos, name="Up (actual)", opacity=0.7, marker_color="#00d4aa"))
-    fig_prob.add_trace(
-        go.Histogram(x=neg, name="Down (actual)", opacity=0.7, marker_color="#ff6b6b")
+    df_display = pd.DataFrame(
+        [
+            {
+                "timestamp": p.timestamp,
+                "close": p.close,
+                "prediction": "UP" if p.predicted_direction == 1 else "DOWN",
+                "confidence": p.confidence,
+                "actual_return": p.actual_return,
+                "actual": (
+                    "UP"
+                    if p.actual_direction == 1
+                    else "DOWN" if p.actual_direction == 0 else "N/A"
+                ),
+                "correct": (
+                    "✓" if p.is_correct is True else "✗" if p.is_correct is False else "N/A"
+                ),
+            }
+            for p in result.predictions
+        ]
     )
-    fig_prob.update_layout(
-        barmode="overlay",
-        template="plotly_dark",
-        title="Predicted Probability Distribution by Actual Class",
-        xaxis_title="P(UP)",
-        yaxis_title="Count",
-    )
-    st.plotly_chart(fig_prob, use_container_width=True)
 
-    st.markdown("### Recent Predictions")
-    styled = results.tail(50).style.format({"probability": "{:.4f}", "forward_return": "{:.6f}"})
-    st.dataframe(styled, use_container_width=True)
+    pos_conf = df_display[df_display["actual"] == "UP"]["confidence"]
+    neg_conf = df_display[df_display["actual"] == "DOWN"]["confidence"]
+
+    if not pos_conf.empty or not neg_conf.empty:
+        fig_prob = go.Figure()
+        if not pos_conf.empty:
+            fig_prob.add_trace(
+                go.Histogram(x=pos_conf, name="Up (actual)", opacity=0.7, marker_color="#00d4aa")
+            )
+        if not neg_conf.empty:
+            fig_prob.add_trace(
+                go.Histogram(x=neg_conf, name="Down (actual)", opacity=0.7, marker_color="#ff6b6b")
+            )
+        fig_prob.update_layout(
+            barmode="overlay",
+            template="plotly_dark",
+            title="Predicted Confidence by Actual Class",
+            xaxis_title="P(UP)",
+            yaxis_title="Count",
+        )
+        st.plotly_chart(fig_prob, use_container_width=True)
+
+    st.markdown("### Predictions by Candle")
+    styled = df_display.style.format(
+        {"close": "${:,.2f}", "confidence": "{:.4f}", "actual_return": "{:+.6f}"}
+    )
+    st.dataframe(styled, use_container_width=True, height=500)
 
 
 def page_model_comparison() -> None:

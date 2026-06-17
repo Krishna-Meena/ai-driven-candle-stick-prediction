@@ -56,7 +56,7 @@ class TestIndicatorValueCreation:
 
     def test_immutable(self, indicator_value: IndicatorValue) -> None:
         with pytest.raises((TypeError, AttributeError)):
-            indicator_value.value = 99.0
+            indicator_value.value = 99.0  # type: ignore[misc]
 
     def test_repr(self, indicator_value: IndicatorValue) -> None:
         r = repr(indicator_value)
@@ -139,7 +139,7 @@ class TestPatternMatchCreation:
 
     def test_immutable(self, pattern_match: PatternMatch) -> None:
         with pytest.raises((TypeError, AttributeError)):
-            pattern_match.pattern = CandlePattern.BULLISH
+            pattern_match.pattern = CandlePattern.BULLISH  # type: ignore[misc]
 
 
 # ── Label ─────────────────────────────────────────────────────────────────────
@@ -195,7 +195,7 @@ class TestLabeledSampleCreation:
 
     def test_immutable(self, labeled_sample: LabeledSample) -> None:
         with pytest.raises((TypeError, AttributeError)):
-            labeled_sample.label = Label.DOWN
+            labeled_sample.label = Label.DOWN  # type: ignore[misc]
 
 
 # ── ClassificationMetrics ─────────────────────────────────────────────────────
@@ -212,7 +212,7 @@ class TestClassificationMetricsCreation:
 
     def test_immutable(self, perfect_metrics: ClassificationMetrics) -> None:
         with pytest.raises((TypeError, AttributeError)):
-            perfect_metrics.accuracy = 0.0
+            perfect_metrics.accuracy = 0.0  # type: ignore[misc]
 
     def test_repr(self, perfect_metrics: ClassificationMetrics) -> None:
         r = repr(perfect_metrics)

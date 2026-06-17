@@ -29,7 +29,7 @@ class TestSymbolCreation:
     def test_immutable(self) -> None:
         s = Symbol("BTC-USD")
         with pytest.raises((TypeError, AttributeError)):
-            s.value = "ETH-USD"
+            s.value = "ETH-USD"  # type: ignore[misc]
 
     def test_repr(self) -> None:
         s = Symbol("BTC-USD")

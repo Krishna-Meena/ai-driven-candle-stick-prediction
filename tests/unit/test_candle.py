@@ -130,7 +130,7 @@ class TestCandleStickCreation:
 
     def test_immutable(self, candle: CandleStick) -> None:
         with pytest.raises((TypeError, AttributeError)):
-            candle.open = 99999.0
+            candle.open = 99999.0  # type: ignore[misc]
 
     def test_repr(self, candle: CandleStick) -> None:
         r = repr(candle)
