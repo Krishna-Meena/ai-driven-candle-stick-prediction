@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,7 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from ai_candle_predictor.common.config.settings import settings
+from ai_candle_predictor.common.date_utils import ensure_date
 from ai_candle_predictor.domain.value_objects.symbol import Symbol
 from ai_candle_predictor.infrastructure.features.parquet_feature_store import (
     ParquetFeatureStore,
@@ -117,6 +119,7 @@ SYMBOL_DISPLAY: dict[str, str] = {
     "^NSEI": "Nifty 50",
     "RELIANCE.NS": "Reliance",
 }
+
 
 if "symbol" not in st.session_state:
     st.session_state.symbol = SYMBOLS[0]
@@ -745,10 +748,13 @@ def page_market_overview() -> None:
 
     import pandas as pd
 
-    df = df.sort_index()
+    if "timestamp" not in df.columns or df.empty:
+        st.warning("Dataset has no timestamp column or is empty.")
+        return
+
     rows = len(df)
-    ts0 = df.index[0]
-    ts1 = df.index[-1]
+    ts0 = pd.to_datetime(df["timestamp"].iloc[0])
+    ts1 = pd.to_datetime(df["timestamp"].iloc[-1])
     last_c = float(df["close"].iloc[-1])
     prev_c = float(df["close"].iloc[-2]) if rows > 1 else last_c
     chg_pct = ((last_c - prev_c) / prev_c) * 100
@@ -783,16 +789,17 @@ def page_market_overview() -> None:
         key="market_range",
     )
     now = ts1
+    ts_col = pd.to_datetime(df["timestamp"])
     if preset == "1M":
-        mask = df.index >= now - pd.Timedelta(days=30)
+        mask = ts_col >= now - pd.Timedelta(days=30)
     elif preset == "3M":
-        mask = df.index >= now - pd.Timedelta(days=90)
+        mask = ts_col >= now - pd.Timedelta(days=90)
     elif preset == "6M":
-        mask = df.index >= now - pd.Timedelta(days=180)
+        mask = ts_col >= now - pd.Timedelta(days=180)
     elif preset == "YTD":
-        mask = df.index >= pd.Timestamp(year=now.year, month=1, day=1)
+        mask = ts_col >= pd.Timestamp(year=now.year, month=1, day=1)
     elif preset == "1Y":
-        mask = df.index >= now - pd.Timedelta(days=365)
+        mask = ts_col >= now - pd.Timedelta(days=365)
     else:
         mask = slice(None)
     dff = df[mask] if not isinstance(mask, slice) else df
@@ -858,21 +865,29 @@ def page_predictions() -> None:
     model_name = st.selectbox("Model", models, key="pred_model")
 
     df = _load_candle_data(symbol)
-    if df is None:
-        st.warning("No raw data. Run ingestion first.")
+    if df is None or df.empty or "timestamp" not in df.columns:
+        st.warning("No historical data available for selected asset.")
         return
 
-    avail_start = df.index[0]
-    avail_end = df.index[-1]
+    avail_start = ensure_date(df["timestamp"].iloc[0]) or date.today()
+    avail_end = ensure_date(df["timestamp"].iloc[-1]) or date.today()
 
     c1, c2 = st.columns(2)
     with c1:
         start_date = st.date_input(
-            "Start", value=avail_start, min_value=avail_start, max_value=avail_end, key="pred_start"
+            "Start",
+            value=avail_start,
+            min_value=avail_start,
+            max_value=avail_end,
+            key="pred_start",
         )
     with c2:
         end_date = st.date_input(
-            "End", value=avail_end, min_value=avail_start, max_value=avail_end, key="pred_end"
+            "End",
+            value=avail_end,
+            min_value=avail_start,
+            max_value=avail_end,
+            key="pred_end",
         )
 
     if start_date >= end_date:
@@ -1667,21 +1682,29 @@ def page_backtesting() -> None:
     model_name = st.selectbox("Model", models, key="bt_model")
 
     df = _load_candle_data(symbol)
-    if df is None:
-        st.warning("No raw data. Run ingestion first.")
+    if df is None or df.empty or "timestamp" not in df.columns:
+        st.warning("No historical data available for selected asset.")
         return
 
-    avail_start = df.index[0]
-    avail_end = df.index[-1]
+    avail_start = ensure_date(df["timestamp"].iloc[0]) or date.today()
+    avail_end = ensure_date(df["timestamp"].iloc[-1]) or date.today()
 
     c1, c2 = st.columns(2)
     with c1:
         start_date = st.date_input(
-            "Start", value=avail_start, min_value=avail_start, max_value=avail_end, key="bt_start"
+            "Start",
+            value=avail_start,
+            min_value=avail_start,
+            max_value=avail_end,
+            key="bt_start",
         )
     with c2:
         end_date = st.date_input(
-            "End", value=avail_end, min_value=avail_start, max_value=avail_end, key="bt_end"
+            "End",
+            value=avail_end,
+            min_value=avail_start,
+            max_value=avail_end,
+            key="bt_end",
         )
 
     if start_date >= end_date:
