@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+from pathlib import Path
 from typing import Any
 
 import matplotlib
@@ -94,6 +95,90 @@ def shap_analysis(
     }
 
 
+def explain_single_sample(
+    symbol: str,
+    pipeline: Pipeline,
+    X: Any,
+    feature_names: list[str],
+    sample_index: int,
+    image_storage: ImageStorage,
+    background_samples: int = 100,
+) -> dict[str, object]:
+    log.info("explaining single sample", symbol=symbol, sample_index=sample_index)
+
+    if sample_index < 0 or sample_index >= len(X):
+        raise ValueError(f"sample_index {sample_index} out of range (0\u2013{len(X) - 1})")
+
+    bg_idx = _select_background(X, background_samples)
+    X_bg = X[bg_idx] if bg_idx is not None else X
+    explainer, X_bg_used = _build_explainer(pipeline, X_bg)
+
+    X_sample = X[sample_index : sample_index + 1]
+    shap_values = explainer(X_sample)
+
+    shap_vals, base_val = _extract_binary(shap_values)
+    vals_i = shap_vals[0]
+    base_i = base_val[0] if isinstance(base_val, np.ndarray) else base_val
+
+    waterfall_path = _save_waterfall(
+        shap_values, feature_names, sample_index, symbol, image_storage
+    )
+
+    force_html = _render_force_html(shap_values, feature_names)
+
+    top_idx = np.argsort(np.abs(vals_i))[::-1][:10]
+    top_features = [
+        {"feature": feature_names[j], "shap_value": round(float(vals_i[j]), 6)} for j in top_idx
+    ]
+
+    log.info("single sample explanation complete", sample_index=sample_index)
+    return {
+        "sample_index": sample_index,
+        "base_value": round(float(base_i), 6),
+        "prediction": round(float(base_i + float(np.sum(vals_i))), 6),
+        "waterfall_plot": str(waterfall_path),
+        "force_html": force_html,
+        "top_features": top_features,
+    }
+
+
+def _select_background(X: Any, max_samples: int = 100) -> Any | None:
+    if len(X) > max_samples:
+        rng = np.random.RandomState(42)
+        return rng.choice(len(X), max_samples, replace=False)
+    return None
+
+
+def _save_waterfall(
+    shap_values: shap.Explanation,
+    _feature_names: list[str],
+    _sample_index: int,
+    symbol: str,
+    image_storage: ImageStorage,
+) -> Path:
+    shap.plots.waterfall(shap_values[0], show=False)
+    buf = io.BytesIO()
+    plt.savefig(buf, format="png", bbox_inches="tight", dpi=100)
+    plt.close()
+    path = image_storage.save(symbol, buf.getvalue())
+    return path
+
+
+def _render_force_html(
+    shap_values: shap.Explanation,
+    feature_names: list[str],
+) -> str:
+    html = shap.force_plot(
+        base_value=shap_values.base_values,
+        shap_values=shap_values.values,
+        features=shap_values.data,
+        feature_names=feature_names,
+        matplotlib=False,
+        show=False,
+    ).html()
+    return str(html)
+
+
 def _build_explainer(pipeline: Pipeline, X_bg: Any) -> tuple[shap.Explainer, Any]:
     clf = pipeline.named_steps["classifier"]
     clf_name = clf.__class__.__name__
@@ -144,7 +229,8 @@ def _save_beeswarm(
     buf = io.BytesIO()
     plt.savefig(buf, format="png", bbox_inches="tight", dpi=100)
     plt.close()
-    return str(image_storage.save(symbol, buf.getvalue()))
+    path = image_storage.save(symbol, buf.getvalue())
+    return str(path)
 
 
 def _save_bar_plot(
@@ -156,7 +242,8 @@ def _save_bar_plot(
     buf = io.BytesIO()
     plt.savefig(buf, format="png", bbox_inches="tight", dpi=100)
     plt.close()
-    return str(image_storage.save(symbol, buf.getvalue()))
+    path = image_storage.save(symbol, buf.getvalue())
+    return str(path)
 
 
 def _local_explanations(
