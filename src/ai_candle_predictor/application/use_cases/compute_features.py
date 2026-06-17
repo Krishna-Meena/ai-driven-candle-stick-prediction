@@ -45,6 +45,11 @@ def compute_features(
         )
 
     df = pd.DataFrame(records)
+    ts_index = pd.to_datetime([c.timestamp for c in candles])
+    if isinstance(ts_index.dtype, pd.DatetimeTZDtype):
+        ts_index = ts_index.tz_convert("UTC").tz_localize(None)
+    df.index = ts_index
+
     features = compute_all(symbol.value, df)
 
     saved = feature_store.save(features)

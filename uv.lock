@@ -18,6 +18,7 @@ name = "ai-candle-predictor"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "joblib" },
     { name = "matplotlib" },
     { name = "mplfinance" },
     { name = "numpy" },
@@ -28,6 +29,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "python-dotenv" },
+    { name = "scikit-learn" },
     { name = "structlog" },
     { name = "tenacity" },
     { name = "typer" },
@@ -59,12 +61,9 @@ inference = [
     { name = "onnxruntime" },
 ]
 ml = [
-    { name = "joblib" },
     { name = "lightgbm" },
     { name = "mlflow" },
     { name = "optuna" },
-    { name = "pandas-ta" },
-    { name = "scikit-learn" },
     { name = "xgboost" },
 ]
 quality = [
@@ -94,7 +93,7 @@ requires-dist = [
     { name = "celery", marker = "extra == 'tasks'", specifier = ">=5.4" },
     { name = "fastapi", marker = "extra == 'api'", specifier = ">=0.115" },
     { name = "great-expectations", marker = "extra == 'quality'", specifier = ">=1" },
-    { name = "joblib", marker = "extra == 'ml'", specifier = ">=1.4" },
+    { name = "joblib", specifier = ">=1.4" },
     { name = "lightgbm", marker = "extra == 'ml'", specifier = ">=4.5" },
     { name = "matplotlib", specifier = ">=3.9" },
     { name = "mlflow", marker = "extra == 'ml'", specifier = ">=2.16" },
@@ -104,7 +103,6 @@ requires-dist = [
     { name = "optuna", marker = "extra == 'ml'", specifier = ">=4" },
     { name = "pandas", specifier = ">=2.2" },
     { name = "pandas-ta", specifier = ">=0.3" },
-    { name = "pandas-ta", marker = "extra == 'ml'", specifier = ">=0.3" },
     { name = "pillow", specifier = ">=11" },
     { name = "polars", marker = "extra == 'data'", specifier = ">=1.15" },
     { name = "pyarrow", specifier = ">=19" },
@@ -113,7 +111,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1" },
     { name = "pytorch-forecasting", marker = "extra == 'dl'", specifier = ">=0.11" },
     { name = "redis", marker = "extra == 'tasks'", specifier = ">=5.2" },
-    { name = "scikit-learn", marker = "extra == 'ml'", specifier = ">=1.6" },
+    { name = "scikit-learn", specifier = ">=1.6" },
     { name = "sqlalchemy", marker = "extra == 'db'", specifier = ">=2.0" },
     { name = "streamlit", marker = "extra == 'dashboard'", specifier = ">=1.40" },
     { name = "structlog", specifier = ">=24" },
