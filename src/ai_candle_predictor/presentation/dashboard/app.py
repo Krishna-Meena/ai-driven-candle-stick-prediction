@@ -242,6 +242,7 @@ def page_home() -> None:
         ("\U0001f4c8", "Model Comparison", "Radar charts, leaderboards, feature importance"),
         ("\U0001f52c", "Explainability", "SHAP global rankings and local explanations"),
         ("\U0001f3af", "Training Center", "Interactive model training with live logs"),
+        ("\U0001f4ca", "Backtesting", "Quant strategy backtest with equity curve and metrics"),
         ("\u2139\ufe0f", "About", "Architecture, pipeline, tech stack, system info"),
     ]
     for i in range(0, len(nav_items), 3):
@@ -1045,6 +1046,237 @@ def page_training_center() -> None:
             st.error(f"Training failed: {e}")
 
 
+# ── Page: Backtesting ─────────────────────────────────────────────────────────
+
+
+def page_backtesting() -> None:
+    st.markdown('<p class="main-header">\U0001f4ca Backtesting</p>', unsafe_allow_html=True)
+    st.divider()
+
+    models = _list_models()
+    if not models:
+        st.warning("No trained models found. Train a model first.")
+        return
+
+    symbol = st.selectbox("Symbol", SYMBOLS, key="bt_symbol")
+    model_name = st.selectbox("Model", models, key="bt_model")
+
+    df = _load_candle_data(symbol)
+    if df is None:
+        st.warning("No raw data. Run ingestion first.")
+        return
+
+    avail_start = df.index[0]
+    avail_end = df.index[-1]
+
+    c1, c2 = st.columns(2)
+    with c1:
+        start_date = st.date_input(
+            "Start", value=avail_start, min_value=avail_start, max_value=avail_end, key="bt_start"
+        )
+    with c2:
+        end_date = st.date_input(
+            "End", value=avail_end, min_value=avail_start, max_value=avail_end, key="bt_end"
+        )
+
+    if start_date >= end_date:
+        st.error("Start must be before end.")
+        return
+
+    model_label = model_name.replace(".joblib", "").replace(f"{symbol}_", "", 1)
+
+    if st.button("Run Backtest", type="primary"):
+        from datetime import datetime
+
+        import pandas as pd
+
+        from ai_candle_predictor.application.use_cases.backtest import run_backtest
+        from ai_candle_predictor.application.use_cases.predict import predict_range
+        from ai_candle_predictor.infrastructure.models.joblib_store import JoblibStore
+        from ai_candle_predictor.infrastructure.persistence.parquet_store import (
+            ParquetStore,
+        )
+
+        ps = ParquetStore()
+        fs = ParquetFeatureStore()
+        ls = ParquetLabelStore()
+        ms = JoblibStore()
+        sym = Symbol(symbol)
+        start_dt = datetime.combine(start_date, datetime.min.time())
+        end_dt = datetime.combine(end_date, datetime.max.time())
+
+        with st.spinner("Running predictions..."):
+            result = predict_range(
+                symbol=sym,
+                model_store=ms,
+                feature_store=fs,
+                label_store=ls,
+                candle_store=ps,
+                start_date=start_dt,
+                end_date=end_dt,
+                model_label=model_label,
+            )
+
+        if not result.predictions:
+            st.warning("No predictions returned for the selected range.")
+            return
+
+        with st.spinner("Running backtest..."):
+            bt = run_backtest(result.predictions, initial_capital=10000.0)
+
+        k1, k2, k3, k4, k5 = st.columns(5)
+        with k1:
+            st.metric("Win Rate", f"{bt.win_rate:.1%}")
+        with k2:
+            st.metric("Total Return", f"{bt.total_return_pct:+.2f}%")
+        with k3:
+            st.metric("Sharpe Ratio", f"{bt.sharpe_ratio:.2f}")
+        with k4:
+            st.metric("Max Drawdown", f"{bt.max_drawdown_pct:.1f}%")
+        with k5:
+            st.metric("Trades", bt.total_trades)
+
+        c1, c2 = st.columns(2)
+        with c1:
+            st.metric("Final Equity", f"${bt.final_equity:,.2f}")
+        with c2:
+            st.metric("Buy & Hold Return", f"{bt.buy_hold_return_pct:+.2f}%")
+
+        import plotly.graph_objects as go
+
+        chart_tabs = st.tabs(["Portfolio Growth", "Trade Distribution", "Monthly Returns"])
+
+        with chart_tabs[0]:
+            eq_df = pd.DataFrame({"date": bt.equity_dates, "equity": bt.equity_values})
+            fig_eq = go.Figure()
+            fig_eq.add_trace(
+                go.Scatter(
+                    x=eq_df["date"],
+                    y=eq_df["equity"],
+                    mode="lines",
+                    name="Strategy",
+                    line=dict(color="#00d4aa", width=2),
+                    fill="tozeroy",
+                    fillcolor="rgba(0,212,170,0.1)",
+                )
+            )
+            bh_equity = [bt.initial_capital * (1 + bt.buy_hold_return_pct / 100)] * len(eq_df)
+            fig_eq.add_trace(
+                go.Scatter(
+                    x=eq_df["date"],
+                    y=bh_equity,
+                    mode="lines",
+                    name="Buy & Hold",
+                    line=dict(color="#888", width=1, dash="dot"),
+                )
+            )
+            fig_eq.add_hline(
+                y=bt.initial_capital,
+                line_dash="dash",
+                line_color="#555",
+                annotation_text="Initial Capital",
+            )
+            fig_eq.update_layout(
+                template="plotly_dark",
+                title="Portfolio Growth",
+                xaxis_title="Date",
+                yaxis_title="Equity ($)",
+                margin=dict(l=0, r=0, t=30, b=0),
+                hovermode="x unified",
+            )
+            st.plotly_chart(fig_eq, width="stretch")
+
+        with chart_tabs[1]:
+            if bt.trades:
+                trades_df = pd.DataFrame(
+                    [
+                        {
+                            "return_pct": t.return_pct,
+                            "won": t.won,
+                            "side": t.side,
+                        }
+                        for t in bt.trades
+                    ]
+                )
+                colors = ["#00d4aa" if w else "#ff6b6b" for w in trades_df["won"]]
+                fig_td = go.Figure()
+                fig_td.add_trace(
+                    go.Bar(
+                        x=list(range(len(trades_df))),
+                        y=trades_df["return_pct"],
+                        marker_color=colors,
+                        name="Trade Returns",
+                        hovertemplate="Trade %{x}<br>Return: %{y:+.2f}%<extra></extra>",
+                    )
+                )
+                fig_td.add_hline(
+                    y=0,
+                    line_color="#555",
+                    line_width=1,
+                )
+                fig_td.update_layout(
+                    template="plotly_dark",
+                    title=f"Trade Distribution ({bt.winning_trades}W / {bt.losing_trades}L)",
+                    xaxis_title="Trade #",
+                    yaxis_title="Return (%)",
+                    margin=dict(l=0, r=0, t=30, b=0),
+                    showlegend=False,
+                )
+                st.plotly_chart(fig_td, width="stretch")
+            else:
+                st.info("No trades were opened.")
+
+        with chart_tabs[2]:
+            if bt.monthly_returns:
+                months = sorted(bt.monthly_returns.keys())
+                m_rets = [bt.monthly_returns[m] for m in months]
+                m_colors = ["#00d4aa" if r >= 0 else "#ff6b6b" for r in m_rets]
+                fig_mr = go.Figure()
+                fig_mr.add_trace(
+                    go.Bar(
+                        x=months,
+                        y=m_rets,
+                        marker_color=m_colors,
+                        name="Monthly Return",
+                        hovertemplate="%{x}<br>Return: %{y:+.2f}%<extra></extra>",
+                    )
+                )
+                fig_mr.add_hline(
+                    y=0,
+                    line_color="#555",
+                    line_width=1,
+                )
+                fig_mr.update_layout(
+                    template="plotly_dark",
+                    title="Monthly Returns",
+                    xaxis_title="Month",
+                    yaxis_title="Return (%)",
+                    margin=dict(l=0, r=0, t=30, b=0),
+                    showlegend=False,
+                )
+                st.plotly_chart(fig_mr, width="stretch")
+            else:
+                st.info("No monthly return data.")
+
+        if bt.trades:
+            st.markdown("### Trade Log")
+            tl_df = pd.DataFrame(
+                [
+                    {
+                        "entry": t.entry_date,
+                        "exit": t.exit_date,
+                        "side": t.side,
+                        "entry_price": t.entry_price,
+                        "exit_price": t.exit_price,
+                        "return_pct": f"{t.return_pct:+.2f}%",
+                        "won": "\u2713" if t.won else "\u2717",
+                    }
+                    for t in bt.trades
+                ]
+            )
+            st.dataframe(tl_df, width="stretch", height=400)
+
+
 # ── Page: About ───────────────────────────────────────────────────────────────
 
 
@@ -1126,6 +1358,7 @@ nav = st.navigation(
         st.Page(page_model_comparison, title="Model Comparison", icon="\U0001f4c8"),
         st.Page(page_explainability, title="Explainability", icon="\U0001f52c"),
         st.Page(page_training_center, title="Training Center", icon="\U0001f3af"),
+        st.Page(page_backtesting, title="Backtesting", icon="\U0001f4ca"),
         st.Page(page_about, title="About", icon="\u2139\ufe0f"),
     ]
 )
