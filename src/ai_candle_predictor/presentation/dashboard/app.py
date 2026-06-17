@@ -1311,6 +1311,16 @@ def page_explainability() -> None:
     st.markdown('<p class="main-header">\U0001f52c Explainability</p>', unsafe_allow_html=True)
     st.divider()
 
+    try:
+        import shap  # noqa: F401
+    except ModuleNotFoundError:
+        st.warning(
+            "SHAP is not installed.  "
+            "Explainability features are disabled.\n\n"
+            "Run: `uv add shap`"
+        )
+        return
+
     models = _list_models()
     if not models:
         st.warning("No trained models found.")
