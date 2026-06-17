@@ -8,7 +8,7 @@ from ai_candle_predictor.domain.entities.candle import CandleStick
 
 
 class TestCandleStickCreation:
-    def test_valid_candle(self, candle) -> None:
+    def test_valid_candle(self, candle: CandleStick) -> None:
         assert isinstance(candle.symbol, str)
         assert isinstance(candle.timestamp, datetime)
         assert candle.open == 50000.0
@@ -128,11 +128,11 @@ class TestCandleStickCreation:
         )
         assert c.return_pct == pytest.approx(0.0)
 
-    def test_immutable(self, candle) -> None:
+    def test_immutable(self, candle: CandleStick) -> None:
         with pytest.raises((TypeError, AttributeError)):
-            candle.open = 99999.0  # type: ignore[misc]
+            candle.open = 99999.0
 
-    def test_repr(self, candle) -> None:
+    def test_repr(self, candle: CandleStick) -> None:
         r = repr(candle)
         assert "CandleStick" in r
         assert "BTC-USD" in r

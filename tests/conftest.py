@@ -123,11 +123,11 @@ def ohlcv_df() -> pd.DataFrame:
     lows = np.minimum(opens, closes) - np.abs(rng.normal(0, 50, n))
     return pd.DataFrame(
         {
-            "Open": opens,
-            "High": highs,
-            "Low": lows,
-            "Close": closes,
-            "Volume": np.abs(rng.normal(1000, 200, n)),
+            "open": opens,
+            "high": highs,
+            "low": lows,
+            "close": closes,
+            "volume": np.abs(rng.normal(1000, 200, n)),
         },
         index=pd.DatetimeIndex(dates, name="timestamp"),
     )
@@ -173,6 +173,8 @@ def labeled_sample(symbol_btc_str: str) -> LabeledSample:
         timestamp=datetime(2024, 1, 15, 12, 0, 0),
         label=Label.UP,
         forward_return=0.015,
+        horizon=5,
+        close=50500.0,
     )
 
 
@@ -185,6 +187,8 @@ def label_list(symbol_btc_str: str) -> list[LabeledSample]:
             timestamp=base + timedelta(hours=i),
             label=Label.UP if i % 2 == 0 else Label.DOWN,
             forward_return=0.01 if i % 2 == 0 else -0.01,
+            horizon=5,
+            close=100.0 + i,
         )
         for i in range(20)
     ]
