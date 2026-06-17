@@ -100,6 +100,7 @@ select = ["E", "F", "I", "N", "W", "UP", "B", "SIM", "ARG"]
 "**/use_cases/train_xgboost.py" = ["N803", "N806"]
 "**/use_cases/tune_hyperparameters.py" = ["N803", "N806"]
 "**/explainability/shap_analyzer.py" = ["N803", "N806"]
+"**/dashboard/app.py" = ["E402", "N806"]
 
 [tool.ruff.format]
 quote-style = "double"
