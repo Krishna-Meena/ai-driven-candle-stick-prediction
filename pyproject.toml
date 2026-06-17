@@ -35,6 +35,7 @@ dependencies = [
     "joblib>=1.4",
     "streamlit>=1.58.0",
     "plotly>=6.8.0",
+    "xgboost>=3.2.0",
 ]
 
 [project.optional-dependencies]

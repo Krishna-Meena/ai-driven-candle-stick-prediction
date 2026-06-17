@@ -35,6 +35,7 @@ dependencies = [
     { name = "structlog" },
     { name = "tenacity" },
     { name = "typer" },
+    { name = "xgboost" },
     { name = "yfinance" },
 ]
 
@@ -125,6 +126,7 @@ requires-dist = [
     { name = "torch", marker = "extra == 'dl'", specifier = ">=2.5" },
     { name = "typer", specifier = ">=0.12" },
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'api'", specifier = ">=0.32" },
+    { name = "xgboost", specifier = ">=3.2.0" },
     { name = "xgboost", marker = "extra == 'ml'", specifier = ">=2.1" },
     { name = "yfinance", specifier = ">=0.2" },
 ]

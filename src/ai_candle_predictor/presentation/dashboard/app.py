@@ -196,107 +196,400 @@ def _load_candle_data(symbol: str) -> Any:
     return pd.read_parquet(path)
 
 
-# ── Page: Home ───────────────────────────────────────────────────────────────
+# ── Cached helpers (executive dashboard) ──────────────────────────────
+
+
+@st.cache_data(ttl=120)
+def _load_registry_entries() -> list[dict[str, Any]]:
+    """Return registry entries as plain dicts for caching."""
+    from ai_candle_predictor.infrastructure.models.model_registry import ModelRegistry
+
+    entries = ModelRegistry().list_models()
+    return [
+        {
+            "symbol": e.symbol,
+            "model_type": e.model_type,
+            "label": e.label,
+            "accuracy": e.accuracy,
+            "precision": e.precision,
+            "recall": e.recall,
+            "f1": e.f1,
+            "roc_auc": e.roc_auc,
+            "support": e.support,
+            "training_date": e.training_date,
+        }
+        for e in entries
+    ]
+
+
+@st.cache_data(ttl=120)
+def _best_accuracy() -> float:
+    entries = _load_registry_entries()
+    if not entries:
+        return 0.0
+    return float(max(e["accuracy"] for e in entries))
+
+
+@st.cache_data(ttl=120)
+def _pipeline_coverage() -> float:
+    """Percentage of default symbols with data in all pipeline stages."""
+    if not SYMBOLS:
+        return 0.0
+    complete = 0
+    for sym in SYMBOLS:
+        status = _pipeline_status(sym)
+        if status["raw"] > 0 and status["features"] > 0 and status["labels"] > 0:
+            complete += 1
+    return complete / len(SYMBOLS) * 100
+
+
+@st.cache_data(ttl=120)
+def _latest_prediction_summary() -> dict[str, Any]:
+    """Attempt a live prediction using the most recently registered model."""
+    entries = _load_registry_entries()
+    if not entries:
+        return {"status": "no model", "direction": "N/A", "confidence": 0.0}
+    latest = entries[-1]
+    sym_str = latest["symbol"]
+    safe = sym_str.replace("^", "_").replace(".", "_")
+    label = latest["label"]
+    fname = f"{safe}_{label}.joblib"
+    model_path = settings.models_dir / fname
+    if not model_path.exists():
+        return {"status": "file missing", "direction": "N/A", "confidence": 0.0, "symbol": sym_str}
+
+    try:
+        from ai_candle_predictor.application.use_cases.train_baseline import (
+            _pivot_features,
+        )
+        from ai_candle_predictor.infrastructure.models.joblib_store import JoblibStore
+
+        ms = JoblibStore()
+        pipeline = ms.load(model_path)
+
+        fs = ParquetFeatureStore()
+        feats = fs.load(Symbol(sym_str))
+        if not feats:
+            return {
+                "status": "no features",
+                "direction": "N/A",
+                "confidence": 0.0,
+                "symbol": sym_str,
+            }
+
+        fdf = _pivot_features(feats).sort_index()
+        if fdf.empty:
+            return {
+                "status": "empty features",
+                "direction": "N/A",
+                "confidence": 0.0,
+                "symbol": sym_str,
+            }
+
+        X_latest = fdf.iloc[[-1]].values
+        y_prob = pipeline.predict_proba(X_latest)[0, 1]
+        direction = "UP" if y_prob >= 0.5 else "DOWN"
+        return {
+            "status": "ok",
+            "direction": direction,
+            "confidence": float(y_prob),
+            "symbol": sym_str,
+            "date": str(fdf.index[-1]),
+        }
+    except Exception:
+        return {"status": "error", "direction": "N/A", "confidence": 0.0, "symbol": sym_str}
+
+
+@st.cache_data(ttl=120)
+def _global_top_features(limit: int = 10) -> list[dict[str, Any]]:
+    """Aggregate top feature names from the feature store of the first symbol with data."""
+    for sym in SYMBOLS:
+        feats = _load_feature_count(sym)
+        if feats > 0:
+            try:
+                from ai_candle_predictor.application.use_cases.train_baseline import (
+                    _pivot_features,
+                )
+
+                fs = ParquetFeatureStore()
+                fdf = _pivot_features(fs.load(Symbol(sym))).sort_index()
+                if not fdf.empty:
+                    names = list(fdf.columns)[:limit]
+                    return [
+                        {"rank": i + 1, "feature": n, "symbol": sym} for i, n in enumerate(names)
+                    ]
+            except Exception:
+                pass
+        break
+    return []
+
+
+# ── Page: Home (Executive Dashboard) ────────────────────────────────
+
+
+def _exec_kpi(value: str, label: str, delta: str | None = None) -> None:
+    cls = ' class="up"' if delta and not delta.startswith("-") else ""
+    delta_html = f'<div class="kpi-delta{cls}">{delta}</div>' if delta else ""
+    st.markdown(
+        f'<div class="kpi-panel">'
+        f'<div class="kpi-value">{value}</div>'
+        f'<div class="kpi-label">{label}</div>'
+        f"{delta_html}</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def _asset_mini_card(symbol: str) -> None:
+    df = _load_candle_data(symbol)
+    if df is None or len(df) < 2:
+        st.markdown(
+            f'<div class="asset-card"><div class="asset-symbol">'
+            f"{SYMBOL_DISPLAY.get(symbol, symbol)}</div>"
+            f'<div style="color:#888;font-size:0.8rem;">No data</div></div>',
+            unsafe_allow_html=True,
+        )
+        return
+    last_c = float(df["close"].iloc[-1])
+    prev_c = float(df["close"].iloc[-2])
+    chg = ((last_c - prev_c) / prev_c) * 100
+    cls = "pos" if chg >= 0 else "neg"
+    chg_sign = "+" if chg >= 0 else ""
+    status = _pipeline_status(symbol)
+    raw_ok = status["raw"] > 0
+    feat_ok = status["features"] > 0
+    lbl_ok = status["labels"] > 0
+    pct_change = f"{chg_sign}{chg:.2f}%"
+    st.markdown(
+        f'<div class="asset-card" style="padding:14px;">'
+        f'<div style="display:flex;justify-content:space-between;align-items:center;">'
+        f'<span class="asset-symbol" style="font-size:0.95rem;">'
+        f"{SYMBOL_DISPLAY.get(symbol, symbol)}</span>"
+        f'<span class="asset-change {cls}" style="font-size:0.8rem;">{pct_change}</span>'
+        f"</div>"
+        f'<div class="asset-price" style="font-size:1.2rem;">${last_c:,.2f}</div>'
+        f'<div style="font-size:0.7rem;color:#888;margin-top:6px;">'
+        f'<span>{"🟢" if raw_ok else "⚪"} {status["raw"]:,}r</span> '
+        f'<span>{"🟢" if feat_ok else "⚪"} {status["features"]:,}f</span> '
+        f'<span>{"🟢" if lbl_ok else "⚪"} {status["labels"]:,}l</span> '
+        f'<span>🧠 {status["models"]}m</span>'
+        f"</div></div>",
+        unsafe_allow_html=True,
+    )
 
 
 def page_home() -> None:
     st.markdown(f'<p class="main-header">{TITLE}</p>', unsafe_allow_html=True)
     st.markdown(
-        '<p class="sub-header">Institutional-grade candlestick prediction platform</p>',
+        '<p class="sub-header">'
+        "Executive Dashboard \u2014 Institutional-grade candlestick prediction platform"
+        "</p>",
         unsafe_allow_html=True,
     )
     st.divider()
 
     symbols_with_data = _list_symbols_with_data()
+    registry = _load_registry_entries()
     model_count = _count_models()
-    feature_total = sum(_load_feature_count(s) for s in symbols_with_data)
-    label_total = sum(_load_label_count(s) for s in symbols_with_data)
+    best_acc = _best_accuracy()
+    coverage = _pipeline_coverage()
+    pred = _latest_prediction_summary()
 
-    k1, k2, k3, k4 = st.columns(4)
+    # ── Top KPI Row ────────────────────────────────────────────────
+    k1, k2, k3, k4, k5 = st.columns(5)
     with k1:
-        st.markdown(
-            f'<div class="kpi-panel"><div class="kpi-value">{len(symbols_with_data)}</div>'
-            '<div class="kpi-label">Assets Tracked</div></div>',
-            unsafe_allow_html=True,
-        )
+        _exec_kpi(str(len(symbols_with_data)), "Assets Tracked", f"/ {len(SYMBOLS)} total")
     with k2:
-        st.markdown(
-            f'<div class="kpi-panel"><div class="kpi-value">{feature_total:,}</div>'
-            '<div class="kpi-label">Feature Rows</div></div>',
-            unsafe_allow_html=True,
-        )
+        _exec_kpi(str(model_count), "Models Trained")
     with k3:
-        st.markdown(
-            f'<div class="kpi-panel"><div class="kpi-value">{label_total:,}</div>'
-            '<div class="kpi-label">Labeled Samples</div></div>',
-            unsafe_allow_html=True,
-        )
+        _exec_kpi(f"{best_acc:.4f}" if best_acc > 0 else "—", "Best Accuracy")
     with k4:
-        st.markdown(
-            f'<div class="kpi-panel"><div class="kpi-value">{model_count}</div>'
-            '<div class="kpi-label">Trained Models</div></div>',
-            unsafe_allow_html=True,
-        )
+        if pred["status"] == "ok":
+            sym = pred.get("symbol", "")
+            _exec_kpi(pred["direction"], f"Latest: {sym}", f"{pred['confidence']:.1%}")
+        else:
+            _exec_kpi("—", "Latest Prediction")
+    with k5:
+        _exec_kpi(f"{coverage:.0f}%", "Pipeline Coverage")
 
-    if symbols_with_data:
-        st.markdown("### Asset Overview")
-        cols = st.columns(len(symbols_with_data))
-        for ci, sym in enumerate(symbols_with_data):
-            df = _load_candle_data(sym)
-            if df is not None and len(df) > 0:
-                last_c = float(df["close"].iloc[-1])
-                prev_c = float(df["close"].iloc[-2]) if len(df) > 1 else last_c
-                chg = ((last_c - prev_c) / prev_c) * 100
-                cls = "pos" if chg >= 0 else "neg"
-                status = _pipeline_status(sym)
-                display = SYMBOL_DISPLAY.get(sym, sym)
-                with cols[ci]:
-                    raw_ok = status["raw"] > 0
-                    feat_ok = status["features"] > 0
-                    lbl_ok = status["labels"] > 0
-                    pipe_info = (
-                        f"{'✅' if raw_ok else '⬜'} {status['raw']:,} rows | "
-                        f"{'✅' if feat_ok else '⬜'} {status['features']:,} feats | "
-                        f"{'✅' if lbl_ok else '⬜'} {status['labels']:,} labels | "
-                        f"{status['models']} models"
-                    )
-                    chg_sign = "+" if chg >= 0 else ""
-                    st.markdown(
-                        f'<div class="asset-card">'
-                        f'<div class="asset-symbol">{display}</div>'
-                        f'<div style="font-size:0.75rem;color:#888;">{sym}</div>'
-                        f'<div class="asset-price">${last_c:,.2f}</div>'
-                        f'<div class="asset-change {cls}">{chg_sign}{chg:.2f}%</div>'
-                        f'<hr style="margin:8px 0;border-color:#2a2a4a;">'
-                        f'<div style="font-size:0.75rem;color:#888;">{pipe_info}</div></div>',
-                        unsafe_allow_html=True,
-                    )
+    # ── Quick action buttons ──────────────────────────────────────
+    ac1, ac2, ac3, ac4 = st.columns(4)
+    with ac1:
+        if st.button("📥 Run Pipeline", use_container_width=True):
+            st.switch_page(st.Page(page_data_pipeline, title="Data Pipeline"))
+    with ac2:
+        if st.button("🎯 Train Model", use_container_width=True):
+            st.switch_page(st.Page(page_training_center, title="Training Center"))
+    with ac3:
+        if st.button("📊 Compare Models", use_container_width=True):
+            st.switch_page(st.Page(page_model_comparison, title="Model Comparison"))
+    with ac4:
+        if st.button("🔍 Explain", use_container_width=True):
+            st.switch_page(st.Page(page_explainability, title="Explainability"))
 
-    st.markdown("### Quick Navigation")
-    nav_items = [
-        ("\U0001f4e6", "Data Pipeline", "Ingest, compute features, and generate labels per asset"),
-        ("\U0001f4ca", "Market Overview", "Interactive OHLCV charts with zoom and range selectors"),
-        ("\U0001f916", "Predictions", "Date-range prediction with confidence gauges"),
-        ("\U0001f4c8", "Model Comparison", "Radar charts, leaderboards, feature importance"),
-        ("\U0001f52c", "Explainability", "SHAP global rankings and local explanations"),
-        ("\U0001f3af", "Training Center", "Interactive model training with live logs"),
-        ("\U0001f4ca", "Backtesting", "Quant strategy backtest with equity curve and metrics"),
-        ("\u2139\ufe0f", "About", "Architecture, pipeline, tech stack, system info"),
-    ]
-    for i in range(0, len(nav_items), 3):
-        cols = st.columns(3)
-        for j in range(3):
-            if i + j < len(nav_items):
-                icon, title, desc = nav_items[i + j]
-                with cols[j]:
-                    st.markdown(
-                        f'<div class="nav-card">'
-                        f'<div class="nav-card-title">{icon} {title}</div>'
-                        f'<div class="nav-card-desc">{desc}</div></div>',
-                        unsafe_allow_html=True,
-                    )
+    st.divider()
 
-    st.caption(f"Data directory: {RAW_DIR}")
+    # ── Two-column: Market Snapshot + Model Leaderboard ──────────────
+    col_left, col_right = st.columns([1.4, 1])
+
+    with col_left:
+        st.markdown("##### Market Snapshot")
+        if symbols_with_data:
+            cols = st.columns(2)
+            for i, sym in enumerate(symbols_with_data):
+                with cols[i % 2]:
+                    _asset_mini_card(sym)
+        else:
+            st.info("No data ingested yet. Visit **Data Pipeline** to get started.")
+
+    with col_right:
+        st.markdown("##### Model Leaderboard")
+        if registry:
+            sorted_reg = sorted(registry, key=lambda r: r["roc_auc"], reverse=True)[:6]
+            import pandas as pd
+
+            def _highlight_top(row: pd.Series) -> list[str]:
+                hl = "background: rgba(0,212,170,0.08)"
+                return [hl if row["Rank"] == 1 else "" for _ in row]
+
+            lb_df = pd.DataFrame(
+                [
+                    {
+                        "Rank": i + 1,
+                        "Symbol": r["symbol"],
+                        "Type": r["model_type"],
+                        "Acc": f"{r['accuracy']:.4f}",
+                        "AUC": f"{r['roc_auc']:.4f}",
+                        "F1": f"{r['f1']:.4f}",
+                    }
+                    for i, r in enumerate(sorted_reg)
+                ]
+            )
+            st.dataframe(
+                lb_df.style.hide(axis="index").apply(_highlight_top, axis=1),
+                width="stretch",
+                height=220,
+            )
+        else:
+            st.info("No trained models yet.")
+
+    st.divider()
+
+    # ── Two-column: Latest Model Performance + Recent Activity ────────
+    bot_left, bot_right = st.columns([1.4, 1])
+
+    with bot_left:
+        st.markdown("##### Latest Model Performance")
+        if registry:
+            latest = registry[-1]
+            import plotly.graph_objects as go
+
+            metrics_names = ["Accuracy", "Precision", "Recall", "F1", "ROC-AUC"]
+            metrics_vals = [
+                latest["accuracy"],
+                latest["precision"],
+                latest["recall"],
+                latest["f1"],
+                latest["roc_auc"],
+            ]
+            fig = go.Figure()
+            fig.add_trace(
+                go.Bar(
+                    x=metrics_names,
+                    y=metrics_vals,
+                    marker_color=["#00d4aa", "#ffd700", "#ff6b6b", "#4fc3f7", "#ab47bc"],
+                    text=[f"{v:.4f}" for v in metrics_vals],
+                    textposition="outside",
+                )
+            )
+            fig_title = (
+                f'{latest["symbol"]} \u2013 '
+                f'{latest["model_type"]} ({latest["training_date"][:10]})'
+            )
+            fig.update_layout(
+                template="plotly_dark",
+                title=fig_title,
+                yaxis=dict(range=[0, 1], title="Score"),
+                margin=dict(l=0, r=0, t=36, b=0),
+                height=220,
+                showlegend=False,
+            )
+            st.plotly_chart(fig, width="stretch")
+
+            st.caption(
+                f"Support: {latest['support']:,} · "
+                f"Label: {latest['label']} · "
+                f"File: {latest['filename']}"
+            )
+        else:
+            st.info("No models trained yet. Visit **Training Center**.")
+
+    with bot_right:
+        st.markdown("##### Recent Activity Feed")
+        if registry:
+            recent = registry[-6:][::-1]
+            for entry in recent:
+                date_str = entry["training_date"][:19].replace("T", " ")
+                st.markdown(
+                    f'<div style="padding:6px 8px;border-left:3px solid #00d4aa;'
+                    f'margin-bottom:6px;font-size:0.8rem;">'
+                    f'<span style="color:#00d4aa;font-weight:600;">'
+                    f'{entry["model_type"]}</span> '
+                    f'<span style="color:#e0e0e0;">on {entry["symbol"]}</span><br>'
+                    f'<span style="color:#888;">AUC {entry["roc_auc"]:.4f} · '
+                    f'Acc {entry["accuracy"]:.4f} · {date_str}</span></div>',
+                    unsafe_allow_html=True,
+                )
+        else:
+            st.info("No activity yet.")
+
+    st.divider()
+
+    # ── Bottom row: Top Features + Latest Training Runs ──────────────
+    b1, b2 = st.columns([1, 1.4])
+
+    with b1:
+        st.markdown("##### Top Features")
+        top_feats = _global_top_features(8)
+        if top_feats:
+            import pandas as pd
+
+            ft_df = pd.DataFrame(top_feats)
+            st.dataframe(
+                ft_df.style.hide(axis="index"),
+                width="stretch",
+                height=220,
+            )
+        else:
+            st.info("Compute features to see the top indicators used by models.")
+
+    with b2:
+        st.markdown("##### Latest Training Runs")
+        if registry:
+            recent_reg = registry[-5:][::-1]
+            import pandas as pd
+
+            runs_df = pd.DataFrame(
+                [
+                    {
+                        "Date": r["training_date"][:10],
+                        "Symbol": r["symbol"],
+                        "Type": r["model_type"],
+                        "Accuracy": f"{r['accuracy']:.4f}",
+                        "ROC-AUC": f"{r['roc_auc']:.4f}",
+                        "Support": r["support"],
+                    }
+                    for r in recent_reg
+                ]
+            )
+            st.dataframe(
+                runs_df.style.hide(axis="index"),
+                width="stretch",
+                height=220,
+            )
+        else:
+            st.info("Train models to populate the training history.")
+
+    st.caption(f"Data: {RAW_DIR} · Registry: {settings.models_dir / 'registry.json'}")
 
 
 # ── Page: Data Pipeline ────────────────────────────────────────────────────────
