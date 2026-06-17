@@ -211,26 +211,11 @@ def _load_candle_data(symbol: str) -> Any:
 
 
 @st.cache_data(ttl=120)
-def _load_registry_entries() -> list[dict[str, Any]]:
-    """Return registry entries as plain dicts for caching."""
+def _load_registry_entries() -> list[Any]:
+    """Return RegistryEntry objects (cast to Any for Streamlit caching)."""
     from ai_candle_predictor.infrastructure.models.model_registry import ModelRegistry
 
-    entries = ModelRegistry().list_models()
-    return [
-        {
-            "symbol": e.symbol,
-            "model_type": e.model_type,
-            "label": e.label,
-            "accuracy": e.accuracy,
-            "precision": e.precision,
-            "recall": e.recall,
-            "f1": e.f1,
-            "roc_auc": e.roc_auc,
-            "support": e.support,
-            "training_date": e.training_date,
-        }
-        for e in entries
-    ]
+    return ModelRegistry().list_models()
 
 
 @st.cache_data(ttl=120)
@@ -238,7 +223,7 @@ def _best_accuracy() -> float:
     entries = _load_registry_entries()
     if not entries:
         return 0.0
-    return float(max(e["accuracy"] for e in entries))
+    return float(max(e.accuracy for e in entries))
 
 
 @st.cache_data(ttl=120)
@@ -261,10 +246,9 @@ def _latest_prediction_summary() -> dict[str, Any]:
     if not entries:
         return {"status": "no model", "direction": "N/A", "confidence": 0.0}
     latest = entries[-1]
-    sym_str = latest["symbol"]
-    safe = sym_str.replace("^", "_").replace(".", "_")
-    label = latest["label"]
-    fname = f"{safe}_{label}.joblib"
+    sym_str = latest.symbol
+    safe = normalize_symbol(sym_str)
+    fname = f"{safe}_{latest.label}.joblib"
     model_path = settings.models_dir / fname
     if not model_path.exists():
         return {"status": "file missing", "direction": "N/A", "confidence": 0.0, "symbol": sym_str}
@@ -455,7 +439,7 @@ def page_home() -> None:
     with col_right:
         st.markdown("##### Model Leaderboard")
         if registry:
-            sorted_reg = sorted(registry, key=lambda r: r["roc_auc"], reverse=True)[:6]
+            sorted_reg = sorted(registry, key=lambda r: r.roc_auc, reverse=True)[:6]
             import pandas as pd
 
             def _highlight_top(row: pd.Series) -> list[str]:
@@ -466,11 +450,11 @@ def page_home() -> None:
                 [
                     {
                         "Rank": i + 1,
-                        "Symbol": r["symbol"],
-                        "Type": r["model_type"],
-                        "Acc": f"{r['accuracy']:.4f}",
-                        "AUC": f"{r['roc_auc']:.4f}",
-                        "F1": f"{r['f1']:.4f}",
+                        "Symbol": r.symbol,
+                        "Type": r.model_type,
+                        "Acc": f"{r.accuracy:.4f}",
+                        "AUC": f"{r.roc_auc:.4f}",
+                        "F1": f"{r.f1:.4f}",
                     }
                     for i, r in enumerate(sorted_reg)
                 ]
@@ -496,11 +480,11 @@ def page_home() -> None:
 
             metrics_names = ["Accuracy", "Precision", "Recall", "F1", "ROC-AUC"]
             metrics_vals = [
-                latest["accuracy"],
-                latest["precision"],
-                latest["recall"],
-                latest["f1"],
-                latest["roc_auc"],
+                latest.accuracy,
+                latest.precision,
+                latest.recall,
+                latest.f1,
+                latest.roc_auc,
             ]
             fig = go.Figure()
             fig.add_trace(
@@ -513,8 +497,7 @@ def page_home() -> None:
                 )
             )
             fig_title = (
-                f'{latest["symbol"]} \u2013 '
-                f'{latest["model_type"]} ({latest["training_date"][:10]})'
+                f"{latest.symbol} \u2013 " f"{latest.model_type} ({latest.training_date[:10]})"
             )
             fig.update_layout(
                 template="plotly_dark",
@@ -527,27 +510,27 @@ def page_home() -> None:
             st.plotly_chart(fig, width="stretch")
 
             st.caption(
-                f"Support: {latest['support']:,} · "
-                f"Label: {latest['label']} · "
-                f"File: {latest['filename']}"
+                f"Support: {latest.support:,} · "
+                f"Label: {latest.label} · "
+                f"File: {latest.filename}"
             )
         else:
-            st.info("No models trained yet. Visit **Training Center**.")
+            st.info("No training runs available.")
 
     with bot_right:
         st.markdown("##### Recent Activity Feed")
         if registry:
             recent = registry[-6:][::-1]
             for entry in recent:
-                date_str = entry["training_date"][:19].replace("T", " ")
+                date_str = entry.training_date[:19].replace("T", " ")
                 st.markdown(
                     f'<div style="padding:6px 8px;border-left:3px solid #00d4aa;'
                     f'margin-bottom:6px;font-size:0.8rem;">'
                     f'<span style="color:#00d4aa;font-weight:600;">'
-                    f'{entry["model_type"]}</span> '
-                    f'<span style="color:#e0e0e0;">on {entry["symbol"]}</span><br>'
-                    f'<span style="color:#888;">AUC {entry["roc_auc"]:.4f} · '
-                    f'Acc {entry["accuracy"]:.4f} · {date_str}</span></div>',
+                    f"{entry.model_type}</span> "
+                    f'<span style="color:#e0e0e0;">on {entry.symbol}</span><br>'
+                    f'<span style="color:#888;">AUC {entry.roc_auc:.4f} · '
+                    f"Acc {entry.accuracy:.4f} · {date_str}</span></div>",
                     unsafe_allow_html=True,
                 )
         else:
@@ -582,12 +565,12 @@ def page_home() -> None:
             runs_df = pd.DataFrame(
                 [
                     {
-                        "Date": r["training_date"][:10],
-                        "Symbol": r["symbol"],
-                        "Type": r["model_type"],
-                        "Accuracy": f"{r['accuracy']:.4f}",
-                        "ROC-AUC": f"{r['roc_auc']:.4f}",
-                        "Support": r["support"],
+                        "Date": r.training_date[:10],
+                        "Symbol": r.symbol,
+                        "Type": r.model_type,
+                        "Accuracy": f"{r.accuracy:.4f}",
+                        "ROC-AUC": f"{r.roc_auc:.4f}",
+                        "Support": r.support,
                     }
                     for r in recent_reg
                 ]

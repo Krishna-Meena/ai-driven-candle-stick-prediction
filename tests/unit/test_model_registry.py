@@ -175,3 +175,30 @@ class TestModelRegistry:
         latest = reg.get_latest("BTC-USD", "LR")
         assert latest is not None
         assert latest.label == "baseline_C1.0"
+
+
+class TestRegistryEntrySchema:
+    """Validate every field of RegistryEntry is present and typed correctly."""
+
+    def test_all_expected_fields_present(self, entry_btc_lr: RegistryEntry) -> None:
+        e = entry_btc_lr
+        assert isinstance(e.symbol, str)
+        assert isinstance(e.model_type, str)
+        assert isinstance(e.label, str)
+        assert isinstance(e.filename, str)
+        assert isinstance(e.accuracy, float)
+        assert isinstance(e.precision, float)
+        assert isinstance(e.recall, float)
+        assert isinstance(e.f1, float)
+        assert isinstance(e.roc_auc, float)
+        assert isinstance(e.support, int)
+        assert isinstance(e.training_date, str)
+
+    def test_filename_non_empty(self, entry_btc_lr: RegistryEntry) -> None:
+        assert len(entry_btc_lr.filename) > 0
+
+    def test_training_date_is_iso(self, entry_btc_lr: RegistryEntry) -> None:
+        from datetime import datetime
+
+        parsed = datetime.fromisoformat(entry_btc_lr.training_date)
+        assert parsed is not None
