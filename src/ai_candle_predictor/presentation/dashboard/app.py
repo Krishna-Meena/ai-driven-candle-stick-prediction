@@ -13,6 +13,7 @@ if str(SRC_DIR) not in sys.path:
 
 from ai_candle_predictor.common.config.settings import settings
 from ai_candle_predictor.common.date_utils import ensure_date
+from ai_candle_predictor.common.symbol_utils import normalize_symbol
 from ai_candle_predictor.domain.value_objects.symbol import Symbol
 from ai_candle_predictor.infrastructure.features.parquet_feature_store import (
     ParquetFeatureStore,
@@ -169,20 +170,26 @@ def _list_models() -> list[str]:
 def _list_symbols_with_data() -> list[str]:
     if not RAW_DIR.exists():
         return []
-    return sorted(p.stem for p in RAW_DIR.glob("*.parquet"))
+    result: list[str] = []
+    for sym in SYMBOLS:
+        safe = normalize_symbol(sym)
+        if (RAW_DIR / f"{safe}.parquet").exists():
+            result.append(sym)
+    return result
 
 
 @st.cache_data(ttl=60)
 def _asset_model_count(symbol: str) -> int:
     if not MODEL_DIR.exists():
         return 0
-    safe = symbol.replace("^", "_").replace(".", "_")
+    safe = normalize_symbol(symbol)
     return len(list(MODEL_DIR.glob(f"{safe}_*.joblib")))
 
 
 @st.cache_data(ttl=60)
 def _pipeline_status(symbol: str) -> dict[str, int]:
-    raw = _count_parquet_rows(RAW_DIR / f"{symbol}.parquet")
+    safe = normalize_symbol(symbol)
+    raw = _count_parquet_rows(RAW_DIR / f"{safe}.parquet")
     feats = _load_feature_count(symbol)
     labels = _load_label_count(symbol)
     models = _asset_model_count(symbol)
@@ -191,7 +198,8 @@ def _pipeline_status(symbol: str) -> dict[str, int]:
 
 @st.cache_data(ttl=60)
 def _load_candle_data(symbol: str) -> Any:
-    path = RAW_DIR / f"{symbol}.parquet"
+    safe = normalize_symbol(symbol)
+    path = RAW_DIR / f"{safe}.parquet"
     if not path.exists():
         return None
     import pandas as pd
