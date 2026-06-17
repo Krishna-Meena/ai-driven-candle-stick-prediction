@@ -27,6 +27,9 @@ dependencies = [
     "yfinance>=0.2",
     "tenacity>=9",
     "pyarrow>=19",
+    "matplotlib>=3.9",
+    "mplfinance>=0.12",
+    "Pillow>=11",
 ]
 
 [project.optional-dependencies]
