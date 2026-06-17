@@ -30,6 +30,7 @@ dependencies = [
     "matplotlib>=3.9",
     "mplfinance>=0.12",
     "Pillow>=11",
+    "pandas-ta>=0.3",
 ]
 
 [project.optional-dependencies]
