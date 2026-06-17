@@ -1,0 +1,18 @@
+* text=auto eol=lf
+
+*.py text diff=python
+*.toml text
+*.md text
+*.yml text
+*.yaml text
+*.json text
+*.env.example text
+
+*.parquet binary
+*.pkl binary
+*.joblib binary
+*.onnx binary
+*.pt binary
+*.h5 binary
+*.png binary
+*.jpg binary
