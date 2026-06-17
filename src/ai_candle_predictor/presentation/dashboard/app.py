@@ -241,6 +241,7 @@ def page_home() -> None:
         ("\U0001f916", "Predictions", "Date-range prediction with confidence gauges"),
         ("\U0001f4c8", "Model Comparison", "Radar charts, leaderboards, feature importance"),
         ("\U0001f52c", "Explainability", "SHAP global rankings and local explanations"),
+        ("\U0001f3af", "Training Center", "Interactive model training with live logs"),
         ("\u2139\ufe0f", "About", "Architecture, pipeline, tech stack, system info"),
     ]
     for i in range(0, len(nav_items), 3):
@@ -365,10 +366,10 @@ def page_market_overview() -> None:
         xaxis=dict(rangeslider=dict(visible=True), type="date"),
         xaxis2=dict(rangeslider=dict(visible=False)),
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     with st.expander("Raw Data Table"):
-        st.dataframe(dff.tail(100), use_container_width=True)
+        st.dataframe(dff.tail(100), width="stretch")
 
 
 # ── Page: Predictions ────────────────────────────────────────────────────────
@@ -523,13 +524,13 @@ def page_predictions() -> None:
             yaxis_title="Count",
             margin=dict(l=0, r=0, t=30, b=0),
         )
-        st.plotly_chart(fig_prob, use_container_width=True)
+        st.plotly_chart(fig_prob, width="stretch")
 
     st.markdown("### Predictions by Candle")
     styled = df_display.style.format(
         {"close": "${:,.2f}", "confidence": "{:.4f}", "actual_return": "{:+.6f}"}
     )
-    st.dataframe(styled, use_container_width=True, height=500)
+    st.dataframe(styled, width="stretch", height=500)
 
 
 # ── Page: Model Comparison ───────────────────────────────────────────────────
@@ -550,7 +551,7 @@ def page_model_comparison() -> None:
 
     rows_list = [{"Model": m.replace(".joblib", "").replace(f"{symbol}_", "", 1)} for m in models]
     st.markdown("### Available Models")
-    st.dataframe(pd.DataFrame(rows_list).style.hide(axis="index"), use_container_width=True)
+    st.dataframe(pd.DataFrame(rows_list).style.hide(axis="index"), width="stretch")
 
     feature_count = _load_feature_count(symbol)
     label_count = _load_label_count(symbol)
@@ -621,7 +622,7 @@ def page_model_comparison() -> None:
             leaderboard_df.pivot(index="Metric", columns="Model", values="Score")
             .style.format("{:.4f}")
             .highlight_max(color="rgba(0,212,170,0.2)", axis=1),
-            use_container_width=True,
+            width="stretch",
         )
 
         import plotly.graph_objects as go
@@ -645,7 +646,7 @@ def page_model_comparison() -> None:
             polar=dict(radialaxis=dict(visible=True, range=[0, 1])),
             margin=dict(l=40, r=40, t=20, b=20),
         )
-        st.plotly_chart(fig_radar, use_container_width=True)
+        st.plotly_chart(fig_radar, width="stretch")
 
         if rf_imp:
             st.markdown("### Top Features — Random Forest")
@@ -666,7 +667,7 @@ def page_model_comparison() -> None:
                 xaxis_title="Importance",
                 margin=dict(l=0, r=0, t=30, b=0),
             )
-            st.plotly_chart(fig_rf, use_container_width=True)
+            st.plotly_chart(fig_rf, width="stretch")
 
         if xgb_imp:
             st.markdown("### Top Features — XGBoost")
@@ -687,7 +688,7 @@ def page_model_comparison() -> None:
                 xaxis_title="Importance",
                 margin=dict(l=0, r=0, t=30, b=0),
             )
-            st.plotly_chart(fig_xgb, use_container_width=True)
+            st.plotly_chart(fig_xgb, width="stretch")
 
 
 # ── Page: Explainability ─────────────────────────────────────────────────────
@@ -719,7 +720,7 @@ def page_explainability() -> None:
         tabs = st.tabs([p.name for p in images])
         for ti, img in enumerate(images):
             with tabs[ti]:
-                st.image(str(img), use_container_width=True)
+                st.image(str(img), width="stretch")
 
         if st.button("Run SHAP Analysis", type="primary"):
 
@@ -771,7 +772,7 @@ def page_explainability() -> None:
                     )
                     st.dataframe(
                         ranking_df.style.format({"Mean |SHAP|": "{:.6f}"}),
-                        use_container_width=True,
+                        width="stretch",
                     )
 
                     import plotly.graph_objects as go
@@ -792,11 +793,119 @@ def page_explainability() -> None:
                         xaxis_title="Mean |SHAP Value|",
                         margin=dict(l=0, r=0, t=30, b=0),
                     )
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, width="stretch")
             except Exception as e:
                 st.error(f"SHAP analysis failed: {e}")
     else:
         st.info("No SHAP plots found. Click 'Run SHAP Analysis' to generate them.")
+
+
+# ── Page: Training Center ──────────────────────────────────────────────────────
+
+
+def page_training_center() -> None:
+    st.markdown('<p class="main-header">\U0001f3af Training Center</p>', unsafe_allow_html=True)
+    st.divider()
+
+    symbols_with_data = _list_symbols_with_data()
+    if not symbols_with_data:
+        st.warning("No data found. Run data ingestion first.")
+        return
+
+    col1, col2 = st.columns(2)
+    with col1:
+        symbol = st.selectbox("Select Asset", symbols_with_data, key="train_symbol")
+    with col2:
+        model_type = st.selectbox(
+            "Select Model",
+            ["Logistic Regression", "Random Forest", "XGBoost"],
+            key="train_model",
+        )
+
+    mt_map = {"Logistic Regression": "lr", "Random Forest": "rf", "XGBoost": "xgb"}
+
+    feature_count = _load_feature_count(symbol)
+    label_count = _load_label_count(symbol)
+
+    k1, k2 = st.columns(2)
+    with k1:
+        st.metric("Features Available", f"{feature_count:,}" if feature_count else "0")
+    with k2:
+        st.metric("Labels Available", f"{label_count:,}" if label_count else "0")
+
+    if feature_count == 0 or label_count == 0:
+        st.warning("Compute features and labels first.")
+        return
+
+    hp: dict[str, object] = {}
+    with st.expander("Hyperparameters"):
+        if model_type == "Logistic Regression":
+            hp["C"] = st.slider("C (inverse regularization)", 0.01, 10.0, 1.0, 0.01, key="hp_lr_c")
+            hp["max_iter"] = st.number_input(
+                "Max iterations", 100, 20000, 5000, 100, key="hp_lr_iter"
+            )
+        elif model_type == "Random Forest":
+            hp["n_estimators"] = st.slider("Trees", 50, 1000, 300, 50, key="hp_rf_n")
+            hp["max_depth"] = st.slider("Max depth", 3, 50, 10, 1, key="hp_rf_d")
+            hp["min_samples_leaf"] = st.slider("Min samples leaf", 1, 50, 5, 1, key="hp_rf_leaf")
+        else:
+            hp["n_estimators"] = st.slider("Trees", 50, 1000, 300, 50, key="hp_xgb_n")
+            hp["max_depth"] = st.slider("Max depth", 3, 30, 6, 1, key="hp_xgb_d")
+            hp["learning_rate"] = st.slider(
+                "Learning rate", 0.001, 0.5, 0.05, 0.001, key="hp_xgb_lr"
+            )
+
+    if st.button("Train Model", type="primary"):
+        st.cache_data.clear()
+
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        log_area = st.code("", language="text", height=200)
+
+        log_lines: list[str] = []
+
+        def on_progress(pct: int, msg: str) -> None:
+            log_lines.append(msg)
+            progress_bar.progress(pct)
+            status_text.text(msg)
+            log_area.code("\n".join(log_lines), language="text")
+
+        from ai_candle_predictor.application.use_cases.train_model import train_model
+        from ai_candle_predictor.infrastructure.models.joblib_store import JoblibStore
+
+        fs = ParquetFeatureStore()
+        ls = ParquetLabelStore()
+        ms = JoblibStore()
+        sym = Symbol(symbol)
+
+        try:
+            path, metrics = train_model(
+                symbol=sym,
+                model_type=mt_map[model_type],
+                feature_store=fs,
+                label_store=ls,
+                model_store=ms,
+                on_progress=on_progress,
+                **hp,  # type: ignore[arg-type]
+            )
+
+            st.success(f"Training complete! Model saved to **{path.name}**")
+
+            st.markdown("### Performance Metrics")
+            mk1, mk2, mk3, mk4, mk5 = st.columns(5)
+            with mk1:
+                st.metric("Accuracy", f"{metrics.accuracy:.4f}")
+            with mk2:
+                st.metric("Precision", f"{metrics.precision:.4f}")
+            with mk3:
+                st.metric("Recall", f"{metrics.recall:.4f}")
+            with mk4:
+                st.metric("F1 Score", f"{metrics.f1:.4f}")
+            with mk5:
+                st.metric("ROC-AUC", f"{metrics.roc_auc:.4f}")
+            st.caption(f"Validation samples: {metrics.support}")
+        except Exception as e:
+            st.error(f"Training failed: {e}")
 
 
 # ── Page: About ───────────────────────────────────────────────────────────────
@@ -879,6 +988,7 @@ nav = st.navigation(
         st.Page(page_predictions, title="Predictions", icon="\U0001f916"),
         st.Page(page_model_comparison, title="Model Comparison", icon="\U0001f4c8"),
         st.Page(page_explainability, title="Explainability", icon="\U0001f52c"),
+        st.Page(page_training_center, title="Training Center", icon="\U0001f3af"),
         st.Page(page_about, title="About", icon="\u2139\ufe0f"),
     ]
 )

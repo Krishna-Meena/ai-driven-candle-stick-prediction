@@ -56,6 +56,7 @@ The dashboard opens at `http://localhost:8501` with a professional dark theme.
 | **Predictions** | Date range selector, confidence gauge (SVG radial), KPI metrics, confidence distribution histogram, full per-candle prediction table |
 | **Model Comparison** | On-demand LR/RF/XGB training with radar chart, performance leaderboard with highlights, top-10 feature importance bar charts per model type |
 | **Explainability** | SHAP visualization gallery (tabs per image), on-demand SHAP analysis with global feature ranking bar chart and sorted importance table |
+| **Training Center** | Interactive model training with asset and model selectors, configurable hyperparameters, live progress bar + log output, and instant metrics display (Accuracy, Precision, Recall, F1, ROC-AUC). Models are automatically persisted and registered. |
 | **About** | Tabbed view: Architecture diagram, Pipeline steps, Tech Stack table, System Info metrics |
 
 ### Theme
