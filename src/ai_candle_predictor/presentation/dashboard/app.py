@@ -1132,7 +1132,6 @@ def page_predictions() -> None:
     display_cols = ["date", "actual", "predicted", "confidence", "correct"]
     styled = (
         df_display[display_cols]
-        .style.format({"confidence": "{:.4f}"})
         .rename(
             columns={
                 "date": "Date",
@@ -1142,6 +1141,7 @@ def page_predictions() -> None:
                 "correct": "Correct/Incorrect",
             }
         )
+        .style.format({"Confidence": "{:.4f}"})
     )
     st.dataframe(styled, width="stretch", height=500)
 
