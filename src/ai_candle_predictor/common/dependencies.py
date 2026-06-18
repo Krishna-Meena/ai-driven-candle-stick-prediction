@@ -10,7 +10,6 @@ class OptionalDependency(NamedTuple):
 
 
 _OPTIONAL: list[OptionalDependency] = [
-    OptionalDependency("shap", "shap", "ml"),
     OptionalDependency("optuna", "optuna", "ml"),
     OptionalDependency("lightgbm", "lightgbm", "ml"),
     OptionalDependency("mlflow", "mlflow", "ml"),

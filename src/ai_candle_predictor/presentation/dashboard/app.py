@@ -526,7 +526,7 @@ def _render_footer() -> None:
     st.markdown(
         '<div class="dashboard-footer">'
         '<span class="version">AI Candle Predictor v0.1.0</span> \u00b7 '
-        '<span class="copyright">&copy; 2026 Institutional Quant Platform</span>'
+        '<span class="copyright">Built by Krishna S Meena</span>'
         "</div>",
         unsafe_allow_html=True,
     )
@@ -579,7 +579,7 @@ def page_home() -> None:
             st.switch_page(st.Page(page_model_comparison, title="Model Comparison"))
     with ac4:
         if st.button("🔍 Explain", use_container_width=True):
-            st.switch_page(st.Page(page_explainability, title="Explainability"))
+            st.switch_page(st.Page(page_model_insights, title="Model Insights"))
 
     st.divider()
 
@@ -1460,269 +1460,157 @@ def page_model_comparison() -> None:
     _render_footer()
 
 
-# ── Page: Explainability ─────────────────────────────────────────────────────
+# ── Page: Model Insights ───────────────────────────────────────────────────
 
 
-def page_explainability() -> None:
-    st.markdown('<p class="main-header">\U0001f52c Explainability</p>', unsafe_allow_html=True)
+def page_model_insights() -> None:
+    st.markdown('<p class="main-header">\U0001f52c Model Insights</p>', unsafe_allow_html=True)
     st.divider()
-
-    try:
-        import shap  # noqa: F401
-    except ModuleNotFoundError:
-        st.warning(
-            "SHAP is not installed.  "
-            "Explainability features are disabled.\n\n"
-            "Run: `uv add shap`"
-        )
-        return
 
     models = _list_models()
     if not models:
-        st.warning("No trained models found.")
+        st.warning("No trained models found. Train a model first in the Training Center.")
         return
 
-    symbol = st.selectbox("Symbol", SYMBOLS, key="explain_symbol")
-    model_name = st.selectbox("Model", models, key="explain_model")
+    symbol = st.selectbox("Symbol", SYMBOLS, key="insight_symbol")
+    model_name = st.selectbox("Model", models, key="insight_model")
 
-    glbl, lcl = st.tabs(["Global Explanations", "Local Explanations"])
+    feat_tab, metric_tab = st.tabs(["Feature Importance", "Model Metrics"])
 
-    with glbl:
-        _explain_global(symbol, model_name)
+    with feat_tab:
+        _show_feature_importance(symbol, model_name)
 
-    with lcl:
-        _explain_local(symbol, model_name)
+    with metric_tab:
+        _show_model_metrics(symbol, model_name)
+
     _render_footer()
 
 
-def _explain_global(symbol: str, model_name: str) -> None:
+def _show_feature_importance(symbol: str, model_name: str) -> None:
+    import numpy as np
     import pandas as pd
 
-    if st.button("Run SHAP Analysis", type="primary"):
-        from ai_candle_predictor.infrastructure.explainability.shap_analyzer import (
-            ShapIndexMapper,
-            shap_analysis,
-        )
-        from ai_candle_predictor.infrastructure.models.joblib_store import JoblibStore
-        from ai_candle_predictor.infrastructure.visualization.image_store import ImageStore
-
-        try:
-            ms = JoblibStore()
-            model_label = model_name.replace(".joblib", "").replace(f"{symbol}_", "", 1)
-            safe = symbol.replace("^", "_").replace(".", "_")
-            fname = f"{safe}_{model_label}.joblib"
-            pipeline = ms.load(settings.models_dir / fname)
-
-            feat_store = ParquetFeatureStore()
-            feats = feat_store.load(Symbol(symbol))
-            if not feats:
-                st.error("No features available.")
-                return
-
-            from ai_candle_predictor.application.use_cases.train_baseline import (
-                _pivot_features,
-            )
-            from ai_candle_predictor.common.feature_utils import ensure_2d_features
-
-            fdf = _pivot_features(feats).sort_index()
-            feature_names = list(fdf.columns)
-            X = ensure_2d_features(fdf.values, name="feature_matrix")
-
-            mapper = ShapIndexMapper(fdf.index, X.shape[1])
-
-            img_store = ImageStore()
-            with st.spinner("Computing SHAP values..."):
-                result = shap_analysis(
-                    symbol=symbol,
-                    pipeline=pipeline,
-                    X=X,
-                    feature_names=feature_names,
-                    image_storage=img_store,
-                    mapper=mapper,
-                )
-
-            st.success(f"SHAP analysis complete ({result.get('samples_analyzed', 0)} samples)")
-
-            st.markdown("### SHAP Summary")
-            summary_path = result.get("summary_plot")
-            if summary_path:
-                st.image(str(summary_path), width="stretch")
-
-            st.markdown("### Feature Importance (bar)")
-            bar_path = result.get("bar_plot")
-            if bar_path:
-                st.image(str(bar_path), width="stretch")
-
-            st.markdown("### Global Feature Ranking")
-            ranking = result.get("global_ranking", {})
-            if ranking:
-                assert isinstance(ranking, dict)
-                ranking_df = pd.DataFrame(
-                    [{"Feature": k, "Mean |SHAP|": v} for k, v in ranking.items()]
-                )
-                st.dataframe(
-                    ranking_df.style.format({"Mean |SHAP|": "{:.6f}"}),
-                    width="stretch",
-                )
-
-                import plotly.graph_objects as go
-
-                fig = go.Figure()
-                top10 = list(ranking.items())[:10]
-                fig.add_trace(
-                    go.Bar(
-                        x=[v for _, v in top10],
-                        y=[k for k, _ in top10],
-                        orientation="h",
-                        marker_color="#F5C542",
-                    )
-                )
-                fig.update_layout(
-                    title="Top 10 Features by Mean |SHAP|",
-                    xaxis_title="Mean |SHAP Value|",
-                    margin=dict(l=0, r=0, t=30, b=0),
-                )
-                st.plotly_chart(fig, width="stretch")
-
-            st.session_state.shap_pipeline = pipeline
-            st.session_state.shap_X = X
-            st.session_state.shap_feature_index = fdf.index
-            st.session_state.shap_feature_names = feature_names
-            st.session_state.shap_symbol = symbol
-            st.session_state.shap_mapper = mapper
-
-        except Exception as e:
-            st.error(f"SHAP analysis failed: {e}")
-
-
-def _explain_local(symbol: str, _model_name: str) -> None:
-    import pandas as pd
-
-    from ai_candle_predictor.common.feature_utils import ensure_2d_features
-
-    pipeline = st.session_state.get("shap_pipeline")
-    raw_X = st.session_state.get("shap_X")
-    feature_index = st.session_state.get("shap_feature_index")
-    feature_names = st.session_state.get("shap_feature_names")
-    shap_symbol = st.session_state.get("shap_symbol")
-    mapper = st.session_state.get("shap_mapper")
-
-    if (
-        pipeline is None
-        or raw_X is None
-        or feature_names is None
-        or feature_index is None
-        or mapper is None
-    ):
-        st.info("Run SHAP analysis first from the Global Explanations tab.")
-        return
-
-    if shap_symbol != symbol:
-        st.info("Switch to the symbol used in the last SHAP analysis.")
-        return
-
-    X = ensure_2d_features(raw_X, name="shap_X")
-
-    dates = sorted(feature_index)
-
-    available_range = st.selectbox(
-        "Select Date",
-        dates,
-        format_func=lambda d: d.strftime("%Y-%m-%d %H:%M"),
-        key="explain_date",
-    )
-
-    if available_range is None:
-        return
+    from ai_candle_predictor.infrastructure.models.joblib_store import JoblibStore
 
     try:
-        sample_idx = mapper.to_position(available_range)
-    except KeyError:
-        st.error(f"Selected date {available_range} not found in the feature matrix.")
-        return
-    except IndexError as e:
-        st.error(f"SHAP position out of bounds: {e}")
-        return
+        ms = JoblibStore()
+        model_label = model_name.replace(".joblib", "").replace(f"{symbol}_", "", 1)
+        safe = symbol.replace("^", "_").replace(".", "_")
+        fname = f"{safe}_{model_label}.joblib"
+        pipeline = ms.load(settings.models_dir / fname)
 
-    if st.button("Explain Prediction", type="primary"):
-        from ai_candle_predictor.infrastructure.explainability.shap_analyzer import (
-            explain_single_sample,
-        )
-        from ai_candle_predictor.infrastructure.visualization.image_store import (
-            ImageStore,
-        )
+        clf = pipeline.named_steps["classifier"]
+        clf_name = clf.__class__.__name__
 
-        img_store = ImageStore()
-        with st.spinner("Computing local explanation..."):
-            try:
-                local = explain_single_sample(
-                    symbol=symbol,
-                    pipeline=pipeline,
-                    X=X,
-                    feature_names=feature_names,
-                    sample_index=sample_idx,
-                    image_storage=img_store,
-                    mapper=mapper,
-                )
-            except Exception as e:
-                st.error(f"Local explanation failed: {e}")
-                return
+        feat_store = ParquetFeatureStore()
+        feats = feat_store.load(Symbol(symbol))
+        if not feats:
+            st.info("No feature data available. Run the Data Pipeline first.")
+            return
 
-        st.success(f"Explanation for {available_range.strftime('%Y-%m-%d %H:%M')}")
+        from ai_candle_predictor.application.use_cases.train_baseline import _pivot_features
 
-        bv = local["base_value"]
-        pred = local["prediction"]
-        assert isinstance(bv, (int, float))
-        assert isinstance(pred, (int, float))
+        fdf = _pivot_features(feats).sort_index()
+        feature_names = list(fdf.columns)
 
-        col1, col2 = st.columns(2)
+        if hasattr(clf, "feature_importances_"):
+            importances = clf.feature_importances_
+        elif hasattr(clf, "coef_"):
+            importances = np.abs(clf.coef_[0]) if clf.coef_.ndim > 1 else np.abs(clf.coef_)
+        else:
+            st.warning(f"Model {clf_name} does not expose feature importances.")
+            return
+
+        feat_df = pd.DataFrame({"Feature": feature_names, "Importance": importances})
+        feat_df = feat_df.sort_values("Importance", ascending=False).reset_index(drop=True)
+
+        col1, col2 = st.columns([2, 1])
         with col1:
-            st.metric("Base Value", f"{bv:.6f}")
-        with col2:
-            st.metric("Prediction (log-odds)", f"{pred:.6f}")
-
-        st.markdown("### Waterfall Plot")
-        waterfall = local.get("waterfall_plot")
-        if waterfall:
-            assert isinstance(waterfall, str)
-            st.image(waterfall, width="stretch")
-
-        st.markdown("### Force Plot")
-        force_html = local.get("force_html", "")
-        if force_html:
-            assert isinstance(force_html, str)
-            st.components.v1.html(force_html, height=200, scrolling=True)
-
-        st.markdown("### Top 10 Contributing Features")
-        top = local.get("top_features", [])
-        if top:
-            assert isinstance(top, list)
-            top_df = pd.DataFrame(top)
+            st.markdown("### Top Features by Importance")
             st.dataframe(
-                top_df.style.format({"shap_value": "{:+.6f}"}),
+                feat_df.head(20).style.format({"Importance": "{:.6f}"}),
                 width="stretch",
             )
 
-            import plotly.graph_objects as go
+        with col2:
+            st.markdown("### Model Info")
+            st.metric("Model Type", clf_name)
+            st.metric("Total Features", len(feature_names))
+            st.metric("Non-Zero Features", int((importances > 0).sum()))
 
-            fig = go.Figure()
-            vals = [t["shap_value"] for t in top]
-            names = [t["feature"] for t in top]
-            colors = ["#F5C542" if v >= 0 else "#FF5252" for v in vals]
-            fig.add_trace(
-                go.Bar(
-                    x=vals,
-                    y=names,
-                    orientation="h",
-                    marker_color=colors,
-                )
+        st.markdown("### Feature Importance Chart")
+        import plotly.graph_objects as go
+
+        top15 = feat_df.head(15)
+        fig = go.Figure()
+        fig.add_trace(
+            go.Bar(
+                x=top15["Importance"],
+                y=top15["Feature"],
+                orientation="h",
+                marker_color="#F5C542",
             )
-            fig.update_layout(
-                title="Top 10 SHAP Contributors",
-                xaxis_title="SHAP Value",
-                margin=dict(l=0, r=0, t=30, b=0),
-            )
-            st.plotly_chart(fig, width="stretch")
+        )
+        fig.update_layout(
+            title=f"Top 15 Features — {clf_name}",
+            xaxis_title="Importance",
+            yaxis_title="Feature",
+            margin=dict(l=0, r=0, t=30, b=0),
+        )
+        st.plotly_chart(fig, width="stretch")
+
+    except FileNotFoundError:
+        st.error(f"Model file not found: {model_name}")
+    except Exception as e:
+        st.error(f"Failed to load model insights: {e}")
+
+
+def _show_model_metrics(_symbol: str, model_name: str) -> None:
+    import pandas as pd
+
+    from ai_candle_predictor.infrastructure.models.model_registry import ModelRegistry
+
+    try:
+        registry = ModelRegistry()
+        entries = registry.list_models()
+
+        entry = None
+        for e in entries:
+            if e.filename == model_name:
+                entry = e
+                break
+
+        if entry is None:
+            st.info("No registry entry found for this model. Metrics may not be available.")
+            return
+
+        cols = st.columns(4)
+        metrics = [
+            ("ROC-AUC", entry.roc_auc),
+            ("Precision", entry.precision),
+            ("Recall", entry.recall),
+            ("F1 Score", entry.f1),
+        ]
+        for i, (label, val) in enumerate(metrics):
+            if val is not None:
+                cols[i].metric(label, f"{val:.4f}" if isinstance(val, float) else str(val))
+            else:
+                cols[i].metric(label, "N/A")
+
+        st.markdown("### Training Details")
+        detail_items = {
+            "Symbol": entry.symbol,
+            "Model Type": entry.model_type,
+            "Label": entry.label,
+            "Support": entry.support,
+            "Accuracy": entry.accuracy,
+            "Train Date": entry.training_date,
+        }
+        details_df = pd.DataFrame(list(detail_items.items()), columns=["Property", "Value"])
+        st.dataframe(details_df, width="stretch")
+
+    except Exception as e:
+        st.error(f"Failed to load model metrics: {e}")
 
 
 # ── Page: Training Center ──────────────────────────────────────────────────────
@@ -2110,7 +1998,7 @@ def page_about() -> None:
         3. **Label Engineering** — Forward returns \u2192 binary UP/DOWN (horizon=5, threshold=0.5%)
         4. **Model Training** — LogisticRegression, RandomForest, XGBoost
         5. **Hyperparameter Tuning** — Optuna (TPE sampler, 50+ trials)
-        6. **Explainability** — SHAP (global rankings + local waterfall plots)
+         6. **Model Insights** — Feature importance, performance metrics
         """)
 
     with tabs[2]:
@@ -2167,7 +2055,7 @@ nav = st.navigation(
         st.Page(page_market_overview, title="Market Overview", icon="\U0001f4ca"),
         st.Page(page_predictions, title="Predictions", icon="\U0001f916"),
         st.Page(page_model_comparison, title="Model Comparison", icon="\U0001f4c8"),
-        st.Page(page_explainability, title="Explainability", icon="\U0001f52c"),
+        st.Page(page_model_insights, title="Model Insights", icon="\U0001f52c"),
         st.Page(page_training_center, title="Training Center", icon="\U0001f3af"),
         st.Page(page_backtesting, title="Backtesting", icon="\U0001f4ca"),
         st.Page(page_about, title="About", icon="\u2139\ufe0f"),
