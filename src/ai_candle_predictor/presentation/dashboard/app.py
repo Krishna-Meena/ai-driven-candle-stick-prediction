@@ -5,7 +5,20 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+import plotly.io as pio
 import streamlit as st
+
+from ai_candle_predictor.common.theme import THEME
+
+pio.templates["black_gold"] = pio.templates["plotly_dark"]
+pio.templates["black_gold"].layout.paper_bgcolor = THEME.background
+pio.templates["black_gold"].layout.plot_bgcolor = THEME.background
+pio.templates["black_gold"].layout.font.color = THEME.text
+pio.templates["black_gold"].layout.titlefont.color = THEME.text
+pio.templates["black_gold"].layout.xaxis.gridcolor = THEME.border
+pio.templates["black_gold"].layout.yaxis.gridcolor = THEME.border
+pio.templates["black_gold"].layout.colorway = list(THEME.chart_colors)
+pio.templates.default = "black_gold"
 
 SRC_DIR = Path(__file__).resolve().parents[3]
 if str(SRC_DIR) not in sys.path:
@@ -33,7 +46,7 @@ st.markdown(
     """<style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
     * { font-family: 'Inter', 'Segoe UI', sans-serif; }
-    .stApp { background: #0A0A0A; }
+    .stApp { background: #050505; }
 
     /* Typography */
     .main-header { font-size: 2rem; font-weight: 700; margin-bottom: 0; color: #FFFFFF; letter-spacing: -0.02em; }
@@ -98,9 +111,19 @@ st.markdown(
     .gauge-container { display: flex; justify-content: center; align-items: center; padding: 12px 0; }
 
     /* Tabs */
-    .stTabs [data-baseweb="tab-list"] { gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.06); }
-    .stTabs [data-baseweb="tab"] { border-radius: 8px; padding: 8px 16px; font-size: 0.85rem; font-weight: 500; color: #B3B3B3; transition: all 0.2s; }
-    .stTabs [aria-selected="true"] { background: rgba(245,197,66,0.12); color: #F5C542; }
+    .stTabs [data-baseweb="tab-list"] { gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 2px; }
+    .stTabs [data-baseweb="tab"] {
+        border-radius: 8px 8px 0 0; padding: 10px 20px; font-size: 0.85rem;
+        font-weight: 500; color: #FFFFFF; background: #121212;
+        border: 1px solid rgba(255,255,255,0.06); border-bottom: none;
+        transition: all 0.2s; margin-right: 2px;
+    }
+    .stTabs [data-baseweb="tab"]:hover { border-color: rgba(245,197,66,0.3); box-shadow: 0 -2px 8px rgba(245,197,66,0.1); }
+    .stTabs [aria-selected="true"] {
+        background: #F5C542 !important; color: #000000 !important;
+        border-color: #F5C542; font-weight: 700;
+        box-shadow: 0 -2px 12px rgba(245,197,66,0.3);
+    }
 
     /* Leaderboard */
     .leaderboard-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 0.85rem; }
@@ -110,7 +133,7 @@ st.markdown(
     .leaderboard-score { font-weight: 600; color: #F5C542; min-width: 40px; text-align: right; }
 
     /* Metric Cards */
-    div[data-testid="stMetric"] { background: rgba(18,18,18,0.85); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; padding: 16px; transition: all 0.3s; box-shadow: 0 2px 12px rgba(0,0,0,0.2); }
+    div[data-testid="stMetric"] { background: #121212; border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; padding: 16px; transition: all 0.3s; box-shadow: 0 2px 12px rgba(0,0,0,0.2); }
     div[data-testid="stMetric"]:hover { border-color: rgba(245,197,66,0.3); }
     div[data-testid="stMetric"] > div:first-child { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; color: #B3B3B3; font-weight: 500; }
     div[data-testid="stMetric"] > div:nth-child(2) { font-size: 1.5rem; font-weight: 700; color: #FFFFFF; }
@@ -121,8 +144,8 @@ st.markdown(
     section[data-testid="stSidebar"] a:hover, section[data-testid="stSidebar"] a:focus { color: #F5C542; background: rgba(245,197,66,0.08); }
 
     /* Buttons */
-    .stButton button { border-radius: 8px; font-weight: 600; transition: all 0.3s; border: 1px solid rgba(245,197,66,0.2); background: rgba(18,18,18,0.85); color: #F5C542; }
-    .stButton button:hover { border-color: #F5C542; background: rgba(245,197,66,0.1); box-shadow: 0 0 20px rgba(245,197,66,0.1); }
+    .stButton button { border-radius: 8px; font-weight: 600; transition: all 0.3s; border: 1px solid rgba(245,197,66,0.2); background: #121212; color: #F5C542; }
+    .stButton button:hover { border-color: #F5C542; background: rgba(245,197,66,0.1); box-shadow: 0 0 20px rgba(245,197,66,0.15); }
     .stButton button[kind="primary"] { background: linear-gradient(135deg, #F5C542, #D4AF37); color: #0A0A0A; border: none; font-weight: 700; }
     .stButton button[kind="primary"]:hover { background: linear-gradient(135deg, #FFD666, #E5C040); box-shadow: 0 4px 20px rgba(245,197,66,0.3); }
 
@@ -131,13 +154,17 @@ st.markdown(
 
     /* DataFrames */
     div[data-testid="stDataFrame"] { background: transparent; border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; overflow: hidden; }
+    div[data-testid="stDataFrame"] th { background: #0A0A0A; color: #F5C542; font-weight: 600; }
+    div[data-testid="stDataFrame"] td { background: #121212; color: #FFFFFF; border-bottom: 1px solid rgba(255,255,255,0.04); }
 
     /* Headers */
     h1, h2, h3, h4, h5, h6 { color: #FFFFFF; }
     h5 { color: #F5C542; font-weight: 600; letter-spacing: 0.3px; }
 
     /* Expander */
-    div[data-testid="stExpander"] { background: rgba(18,18,18,0.85); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; backdrop-filter: blur(8px); }
+    div[data-testid="stExpander"] { background: #121212; border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; }
+    div[data-testid="stExpander"]:hover { border-color: rgba(245,197,66,0.2); }
+    div[data-testid="stExpander"] details summary { color: #FFFFFF; font-weight: 500; }
 
     /* Info / Warning / Error */
     div[data-testid="stInfo"] { background: rgba(245,197,66,0.08); border: 1px solid rgba(245,197,66,0.15); color: #F5C542; }
@@ -145,7 +172,41 @@ st.markdown(
     div[data-testid="stError"] { background: rgba(255,82,82,0.15); border: 1px solid #FF5252; color: #FF5252; }
 
     /* Selectbox */
-    div[data-baseweb="select"] > div { background: rgba(18,18,18,0.85); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; }
+    div[data-baseweb="select"] > div { background: #121212; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; }
+    div[data-baseweb="select"] > div:hover { border-color: rgba(245,197,66,0.3); }
+    div[data-baseweb="select"] ul { background: #121212; border: 1px solid rgba(245,197,66,0.2); }
+    div[data-baseweb="select"] li { color: #FFFFFF; }
+    div[data-baseweb="select"] li:hover { background: rgba(245,197,66,0.1); }
+
+    /* Date input */
+    div[data-testid="stDateInput"] input { background: #121212; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #FFFFFF; }
+    div[data-testid="stDateInput"] input:focus { border-color: #F5C542; box-shadow: 0 0 8px rgba(245,197,66,0.2); }
+
+    /* Text input */
+    div[data-testid="stTextInput"] input { background: #121212; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #FFFFFF; }
+    div[data-testid="stTextInput"] input:focus { border-color: #F5C542; box-shadow: 0 0 8px rgba(245,197,66,0.2); }
+
+    /* Number input */
+    div[data-testid="stNumberInput"] input { background: #121212; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #FFFFFF; }
+    div[data-testid="stNumberInput"] input:focus { border-color: #F5C542; box-shadow: 0 0 8px rgba(245,197,66,0.2); }
+
+    /* Multiselect */
+    div[data-baseweb="select"] div[role="listbox"] { background: #121212; border: 1px solid rgba(245,197,66,0.2); }
+    div[data-baseweb="tag"] { background: rgba(245,197,66,0.15); color: #F5C542; border-radius: 4px; }
+    div[data-baseweb="tag"] button { color: #F5C542; }
+
+    /* Radio buttons */
+    div[data-testid="stRadio"] label { color: #FFFFFF; }
+    div[data-testid="stRadio"] input:checked ~ div { color: #F5C542; }
+
+    /* Checkbox */
+    div[data-testid="stCheckbox"] label { color: #FFFFFF; }
+    div[data-testid="stCheckbox"] input:checked ~ div { color: #F5C542; }
+    div[data-testid="stCheckbox"] svg { fill: #F5C542 !important; }
+
+    /* Slider */
+    div[data-testid="stSlider"] div[data-baseweb="slider"] div { background: rgba(245,197,66,0.2); }
+    div[data-testid="stSlider"] div[role="slider"] { background: #F5C542; box-shadow: 0 0 8px rgba(245,197,66,0.4); }
 
     /* Spinner */
     div[data-testid="stSpinner"] { color: #F5C542; }
@@ -171,7 +232,27 @@ st.markdown(
     .confidence-bar { height: 6px; border-radius: 3px; background: linear-gradient(90deg, #FF5252, #F5C542, #00C853); margin-top: 4px; transition: width 0.5s ease; }
 
     /* Chart container */
-    .chart-container { background: rgba(18,18,18,0.85); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; padding: 16px; backdrop-filter: blur(8px); }
+    .chart-container { background: #121212; border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; padding: 16px; box-shadow: 0 2px 12px rgba(0,0,0,0.2); }
+
+    /* Success / Info messages */
+    div[data-testid="stNotification"] { background: #121212; border: 1px solid rgba(245,197,66,0.2); border-radius: 8px; }
+    .stAlert { background: #121212; border: 1px solid rgba(245,197,66,0.15); border-radius: 8px; color: #FFFFFF; }
+
+    /* Code blocks */
+    code { background: #0A0A0A; color: #F5C542; border-radius: 4px; padding: 2px 6px; }
+
+    /* Caption */
+    .stCaption { color: #B3B3B3; font-size: 0.75rem; }
+
+    /* Markdown */
+    .stMarkdown p { color: #B3B3B3; }
+    .stMarkdown strong { color: #FFFFFF; }
+
+    /* Overall scrollbar */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: #0A0A0A; }
+    ::-webkit-scrollbar-thumb { background: #252525; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #F5C542; }
     </style>""",
     unsafe_allow_html=True,
 )
@@ -579,7 +660,6 @@ def page_home() -> None:
                 f"{latest.symbol} \u2013 " f"{latest.model_type} ({latest.training_date[:10]})"
             )
             fig.update_layout(
-                template="plotly_dark",
                 title=fig_title,
                 yaxis=dict(range=[0, 1], title="Score"),
                 margin=dict(l=0, r=0, t=36, b=0),
@@ -910,7 +990,6 @@ def page_market_overview() -> None:
     fig.update_layout(
         height=520,
         margin=dict(l=0, r=0, t=20, b=0),
-        template="plotly_dark",
         hovermode="x unified",
         xaxis=dict(rangeslider=dict(visible=True), type="date"),
         xaxis2=dict(rangeslider=dict(visible=False)),
@@ -1099,7 +1178,6 @@ def page_predictions() -> None:
                 )
             )
             fig_timeline.update_layout(
-                template="plotly_dark",
                 title="Prediction Timeline",
                 xaxis_title="Date",
                 yaxis_title="Price",
@@ -1133,7 +1211,6 @@ def page_predictions() -> None:
                 annotation_text="Random (0.5)",
             )
             fig_conf.update_layout(
-                template="plotly_dark",
                 title="Confidence Over Time",
                 xaxis_title="Date",
                 yaxis_title="P(UP)",
@@ -1175,7 +1252,6 @@ def page_predictions() -> None:
                 annotation_text="Random (0.5)",
             )
             fig_acc.update_layout(
-                template="plotly_dark",
                 title="Accuracy Over Range",
                 xaxis_title="Date",
                 yaxis_title="Accuracy",
@@ -1202,7 +1278,6 @@ def page_predictions() -> None:
                 )
             fig_dist.update_layout(
                 barmode="overlay",
-                template="plotly_dark",
                 title="Confidence Distribution by Actual Class",
                 xaxis_title="P(UP)",
                 yaxis_title="Count",
@@ -1338,7 +1413,6 @@ def page_model_comparison() -> None:
                 )
             )
         fig_radar.update_layout(
-            template="plotly_dark",
             polar=dict(radialaxis=dict(visible=True, range=[0, 1])),
             margin=dict(l=40, r=40, t=20, b=20),
         )
@@ -1358,7 +1432,6 @@ def page_model_comparison() -> None:
                 )
             )
             fig_rf.update_layout(
-                template="plotly_dark",
                 title="Top 10 Features (RF)",
                 xaxis_title="Importance",
                 margin=dict(l=0, r=0, t=30, b=0),
@@ -1379,7 +1452,6 @@ def page_model_comparison() -> None:
                 )
             )
             fig_xgb.update_layout(
-                template="plotly_dark",
                 title="Top 10 Features (XGB)",
                 xaxis_title="Importance",
                 margin=dict(l=0, r=0, t=30, b=0),
@@ -1502,7 +1574,6 @@ def _explain_global(symbol: str, model_name: str) -> None:
                     )
                 )
                 fig.update_layout(
-                    template="plotly_dark",
                     title="Top 10 Features by Mean |SHAP|",
                     xaxis_title="Mean |SHAP Value|",
                     margin=dict(l=0, r=0, t=30, b=0),
@@ -1641,7 +1712,6 @@ def _explain_local(symbol: str, _model_name: str) -> None:
                 )
             )
             fig.update_layout(
-                template="plotly_dark",
                 title="Top 10 SHAP Contributors",
                 xaxis_title="SHAP Value",
                 margin=dict(l=0, r=0, t=30, b=0),
@@ -1897,7 +1967,6 @@ def page_backtesting() -> None:
                 annotation_text="Initial Capital",
             )
             fig_eq.update_layout(
-                template="plotly_dark",
                 title="Portfolio Growth",
                 xaxis_title="Date",
                 yaxis_title="Equity ($)",
@@ -1935,7 +2004,6 @@ def page_backtesting() -> None:
                     line_width=1,
                 )
                 fig_td.update_layout(
-                    template="plotly_dark",
                     title=f"Trade Distribution ({bt.winning_trades}W / {bt.losing_trades}L)",
                     xaxis_title="Trade #",
                     yaxis_title="Return (%)",
@@ -1967,7 +2035,6 @@ def page_backtesting() -> None:
                     line_width=1,
                 )
                 fig_mr.update_layout(
-                    template="plotly_dark",
                     title="Monthly Returns",
                     xaxis_title="Month",
                     yaxis_title="Return (%)",
