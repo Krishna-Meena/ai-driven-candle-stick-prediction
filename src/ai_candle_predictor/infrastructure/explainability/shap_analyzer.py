@@ -33,51 +33,77 @@ def check_shap() -> None:
         raise RuntimeError("SHAP is not installed.  Run: uv add shap")
 
 
-def get_shap_position(
-    feature_index: PdIndex,
-    timestamp: Any,
-    n_samples: int,
-) -> int:
-    """Convert a DataFrame timestamp label to a 0-based positional index for SHAP arrays.
+# ---------------------------------------------------------------------------
+# ShapIndexMapper — validate and convert DataFrame index → positional index
+# ---------------------------------------------------------------------------
 
-    Parameters
-    ----------
-    feature_index : pd.Index
-        The index of the feature matrix DataFrame (from ``_pivot_features``).
-    timestamp : Any
-        The timestamp label to look up (must exist in *feature_index*).
-    n_samples : int
-        Number of rows in the SHAP values array (``X.shape[0]``).
 
-    Returns
-    -------
-    int
-        0-based positional index into the SHAP values array.
+class ShapIndexMapper:
+    """Maps DataFrame index labels to 0-based positional indices for SHAP arrays.
 
-    Raises
-    ------
-    KeyError
-        If *timestamp* is not found in *feature_index*.
-    IndexError
-        If the resolved position is outside ``[0, n_samples)``.
+    Validates alignment between the feature matrix, its index, and SHAP output
+    at every step so that index-vs-position mismatches are caught early.
     """
-    raw: Any = feature_index.get_loc(timestamp)
 
-    if isinstance(raw, slice):
-        pos: int = raw.start
-    elif isinstance(raw, (np.ndarray, list)):
-        pos = int(raw[0])
-    else:
-        pos = int(raw)
+    def __init__(self, feature_index: PdIndex, n_features: int) -> None:
+        self._index = feature_index
+        self._n_features = n_features  # number of columns (used for shape checks)
 
-    if not 0 <= pos < n_samples:
-        raise IndexError(
-            f"SHAP position {pos} out of bounds for array of size {n_samples}. "
-            f"Feature index has {len(feature_index)} entries, "
-            f"SHAP values have {n_samples} samples."
-        )
+    # -- Public API -------------------------------------------------------
 
-    return pos
+    def to_position(self, timestamp: Any) -> int:
+        """Convert a DataFrame index label to a 0-based positional index.
+
+        Raises
+        ------
+        KeyError
+            *timestamp* is not present in the stored index.
+        IndexError
+            Resolved position is outside the valid range.
+        """
+        raw: Any = self._index.get_loc(timestamp)
+
+        if isinstance(raw, slice):
+            pos: int = raw.start
+        elif isinstance(raw, (np.ndarray, list)):
+            pos = int(raw[0])
+        else:
+            pos = int(raw)
+
+        if not 0 <= pos < len(self._index):
+            raise IndexError(
+                f"ShapIndexMapper: converted position {pos} is outside "
+                f"[0, {len(self._index)}) for index of length {len(self._index)}. "
+                f"Timestamp={timestamp!r}, index_dtype={self._index.dtype}."
+            )
+        return pos
+
+    def validate_shap_alignment(
+        self, shap_values: NDArray[Any], label: str = "shap_values"
+    ) -> None:
+        """Assert that *shap_values* has the same first dimension as the feature index."""
+        n_expected = len(self._index)
+        n_actual = shap_values.shape[0]
+        if n_actual != n_expected:
+            raise ValueError(
+                f"{label} has {n_actual} rows but the feature index has {n_expected}. "
+                "This means the SHAP computation used a different dataset than "
+                "the one the index was built from. Check that the same X was passed "
+                "to both shap_analysis() (or explain_single_sample()) and the mapper."
+            )
+
+    def validate_sample_index(self, position: int) -> None:
+        """Assert that *position* is a valid index into the feature matrix."""
+        n = len(self._index)
+        if not 0 <= position < n:
+            raise IndexError(
+                f"Sample position {position} is outside valid range [0, {n}) "
+                f"for feature index of length {n}."
+            )
+
+    @property
+    def n_rows(self) -> int:
+        return len(self._index)
 
 
 # ---------------------------------------------------------------------------
@@ -92,6 +118,7 @@ def shap_analysis(
     feature_names: list[str],
     image_storage: ImageStorage,
     max_samples: int = 100,
+    mapper: ShapIndexMapper | None = None,
 ) -> dict[str, object]:
     check_shap()
     import shap
@@ -120,6 +147,9 @@ def shap_analysis(
 
     vals, base = _normalize_shap_output(shap_vals)
     log.debug("normalized shap output", vals_shape=vals.shape, base_shape=base.shape)
+
+    if mapper is not None:
+        mapper.validate_shap_alignment(vals, label="shap_analysis output")
 
     bar_explanation = shap.Explanation(
         values=vals,
@@ -156,6 +186,7 @@ def explain_single_sample(
     sample_index: int,
     image_storage: ImageStorage,
     background_samples: int = 100,
+    mapper: ShapIndexMapper | None = None,
 ) -> dict[str, object]:
     check_shap()
 
@@ -167,6 +198,9 @@ def explain_single_sample(
         X_type=type(X).__name__,
         sample_index=sample_index,
     )
+
+    if mapper is not None:
+        mapper.validate_sample_index(sample_index)
 
     X_bg = _select_background(X_arr, background_samples)
     explainer, X_bg_used = _build_explainer(pipeline, X_bg)
@@ -181,6 +215,9 @@ def explain_single_sample(
 
     vals, base = _normalize_shap_output(shap_vals)
     log.debug("normalized shap output", vals_shape=vals.shape, base_shape=base.shape)
+
+    if mapper is not None:
+        mapper.validate_shap_alignment(vals, label="explain_single_sample output")
 
     sample_values = vals[sample_index : sample_index + 1]
     sample_base = float(base[sample_index] if isinstance(base, np.ndarray) else base)

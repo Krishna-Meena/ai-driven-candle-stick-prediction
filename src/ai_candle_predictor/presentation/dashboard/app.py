@@ -1500,6 +1500,7 @@ def _explain_global(symbol: str, model_name: str) -> None:
 
     if st.button("Run SHAP Analysis", type="primary"):
         from ai_candle_predictor.infrastructure.explainability.shap_analyzer import (
+            ShapIndexMapper,
             shap_analysis,
         )
         from ai_candle_predictor.infrastructure.models.joblib_store import JoblibStore
@@ -1527,6 +1528,8 @@ def _explain_global(symbol: str, model_name: str) -> None:
             feature_names = list(fdf.columns)
             X = ensure_2d_features(fdf.values, name="feature_matrix")
 
+            mapper = ShapIndexMapper(fdf.index, X.shape[1])
+
             img_store = ImageStore()
             with st.spinner("Computing SHAP values..."):
                 result = shap_analysis(
@@ -1535,6 +1538,7 @@ def _explain_global(symbol: str, model_name: str) -> None:
                     X=X,
                     feature_names=feature_names,
                     image_storage=img_store,
+                    mapper=mapper,
                 )
 
             st.success(f"SHAP analysis complete ({result.get('samples_analyzed', 0)} samples)")
@@ -1585,6 +1589,7 @@ def _explain_global(symbol: str, model_name: str) -> None:
             st.session_state.shap_feature_index = fdf.index
             st.session_state.shap_feature_names = feature_names
             st.session_state.shap_symbol = symbol
+            st.session_state.shap_mapper = mapper
 
         except Exception as e:
             st.error(f"SHAP analysis failed: {e}")
@@ -1594,17 +1599,21 @@ def _explain_local(symbol: str, _model_name: str) -> None:
     import pandas as pd
 
     from ai_candle_predictor.common.feature_utils import ensure_2d_features
-    from ai_candle_predictor.infrastructure.explainability.shap_analyzer import (
-        get_shap_position,
-    )
 
     pipeline = st.session_state.get("shap_pipeline")
     raw_X = st.session_state.get("shap_X")
     feature_index = st.session_state.get("shap_feature_index")
     feature_names = st.session_state.get("shap_feature_names")
     shap_symbol = st.session_state.get("shap_symbol")
+    mapper = st.session_state.get("shap_mapper")
 
-    if pipeline is None or raw_X is None or feature_names is None or feature_index is None:
+    if (
+        pipeline is None
+        or raw_X is None
+        or feature_names is None
+        or feature_index is None
+        or mapper is None
+    ):
         st.info("Run SHAP analysis first from the Global Explanations tab.")
         return
 
@@ -1627,7 +1636,7 @@ def _explain_local(symbol: str, _model_name: str) -> None:
         return
 
     try:
-        sample_idx = get_shap_position(feature_index, available_range, len(X))
+        sample_idx = mapper.to_position(available_range)
     except KeyError:
         st.error(f"Selected date {available_range} not found in the feature matrix.")
         return
@@ -1653,6 +1662,7 @@ def _explain_local(symbol: str, _model_name: str) -> None:
                     feature_names=feature_names,
                     sample_index=sample_idx,
                     image_storage=img_store,
+                    mapper=mapper,
                 )
             except Exception as e:
                 st.error(f"Local explanation failed: {e}")
