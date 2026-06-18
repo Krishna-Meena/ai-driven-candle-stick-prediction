@@ -1449,10 +1449,11 @@ def _explain_global(symbol: str, model_name: str) -> None:
             from ai_candle_predictor.application.use_cases.train_baseline import (
                 _pivot_features,
             )
+            from ai_candle_predictor.common.feature_utils import ensure_2d_features
 
             fdf = _pivot_features(feats).sort_index()
             feature_names = list(fdf.columns)
-            X = fdf.values
+            X = ensure_2d_features(fdf.values, name="feature_matrix")
 
             img_store = ImageStore()
             with st.spinner("Computing SHAP values..."):
@@ -1520,18 +1521,22 @@ def _explain_global(symbol: str, model_name: str) -> None:
 def _explain_local(symbol: str, _model_name: str) -> None:
     import pandas as pd
 
+    from ai_candle_predictor.common.feature_utils import ensure_2d_features
+
     pipeline = st.session_state.get("shap_pipeline")
-    X = st.session_state.get("shap_X")
+    raw_X = st.session_state.get("shap_X")
     feature_names = st.session_state.get("shap_feature_names")
     shap_symbol = st.session_state.get("shap_symbol")
 
-    if pipeline is None or X is None or feature_names is None:
+    if pipeline is None or raw_X is None or feature_names is None:
         st.info("Run SHAP analysis first from the Global Explanations tab.")
         return
 
     if shap_symbol != symbol:
         st.info("Switch to the symbol used in the last SHAP analysis.")
         return
+
+    X = ensure_2d_features(raw_X, name="shap_X")
 
     from ai_candle_predictor.domain.value_objects.symbol import Symbol
     from ai_candle_predictor.infrastructure.persistence.parquet_store import ParquetStore

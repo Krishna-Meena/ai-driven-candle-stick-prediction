@@ -7,9 +7,11 @@ from typing import Any
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
+from numpy.typing import NDArray
 from sklearn.pipeline import Pipeline
 
 from ai_candle_predictor.application.ports.image_storage import ImageStorage
+from ai_candle_predictor.common.feature_utils import ensure_2d_features
 from ai_candle_predictor.common.logging import get_logger
 
 matplotlib.use("Agg")
@@ -41,17 +43,24 @@ def shap_analysis(
     check_shap()
     import shap
 
+    X_arr = ensure_2d_features(X, name="X")
     log.info(
         "shap analysis started",
         symbol=symbol,
-        samples=len(X),
-        features=len(feature_names),
+        samples=X_arr.shape[0],
+        features=X_arr.shape[1],
     )
 
-    X_bg = _select_background(X, max_samples)
+    X_bg = _select_background(X_arr, max_samples)
     explainer, X_bg_used = _build_explainer(pipeline, X_bg)
 
-    shap_vals = explainer.shap_values(X)
+    log.debug(
+        "running shap_values",
+        X_shape=X_arr.shape,
+        X_ndim=X_arr.ndim,
+        explainer_type=type(explainer).__name__,
+    )
+    shap_vals = explainer.shap_values(X_arr)
     vals, base = _extract_binary(shap_vals)
 
     bar_explanation = shap.Explanation(
@@ -92,10 +101,23 @@ def explain_single_sample(
 ) -> dict[str, object]:
     check_shap()
 
-    X_bg = _select_background(X, background_samples)
+    X_arr = ensure_2d_features(X, name="X")
+    log.debug(
+        "explain_single_sample started",
+        X_shape=X_arr.shape,
+        X_ndim=X_arr.ndim,
+        sample_index=sample_index,
+    )
+
+    X_bg = _select_background(X_arr, background_samples)
     explainer, X_bg_used = _build_explainer(pipeline, X_bg)
 
-    shap_vals = explainer.shap_values(X)
+    log.debug(
+        "running shap_values for local explanation",
+        X_shape=X_arr.shape,
+        explainer_type=type(explainer).__name__,
+    )
+    shap_vals = explainer.shap_values(X_arr)
 
     sample = shap_vals[sample_index : sample_index + 1]
     base_val = float(
@@ -121,11 +143,20 @@ def explain_single_sample(
     }
 
 
-def _select_background(X: Any, max_samples: int = 100) -> Any | None:
+def _select_background(X: NDArray[Any], max_samples: int = 100) -> NDArray[Any]:
+    """Subsample *X* to at most *max_samples* rows, preserving 2-D shape.
+
+    Returns the actual feature rows, *not* integer indices.
+    When the dataset is small enough the full array is returned unchanged.
+    """
     if len(X) > max_samples:
         rng = np.random.RandomState(42)
-        return rng.choice(len(X), max_samples, replace=False)
-    return None
+        idx = rng.choice(len(X), max_samples, replace=False)
+        bg = X[idx]
+        log.debug("background subsampled", original=len(X), selected=len(bg), shape=bg.shape)
+        return bg
+    log.debug("background full dataset used", rows=len(X), shape=X.shape)
+    return X
 
 
 def _save_waterfall(

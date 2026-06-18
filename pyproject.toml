@@ -107,6 +107,7 @@ select = ["E", "F", "I", "N", "W", "UP", "B", "SIM", "ARG"]
 "**/use_cases/tune_hyperparameters.py" = ["N803", "N806"]
 "**/explainability/shap_analyzer.py" = ["N803", "N806"]
 "**/dashboard/app.py" = ["E402", "E501", "N806"]
+"**/test_feature_utils.py" = ["N806"]
 
 [tool.ruff.format]
 quote-style = "double"
