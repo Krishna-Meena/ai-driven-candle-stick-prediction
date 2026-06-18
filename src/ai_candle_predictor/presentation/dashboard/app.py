@@ -31,81 +31,147 @@ st.set_page_config(
 
 st.markdown(
     """<style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
     * { font-family: 'Inter', 'Segoe UI', sans-serif; }
-    .stApp { background: #0f0f23; }
-    .main-header { font-size: 2rem; font-weight: 700; margin-bottom: 0; color: #e0e0e0; }
-    .sub-header { font-size: 1rem; color: #888; margin-top: 0; }
+    .stApp { background: #0A0A0A; }
+
+    /* Typography */
+    .main-header { font-size: 2rem; font-weight: 700; margin-bottom: 0; color: #FFFFFF; letter-spacing: -0.02em; }
+    .sub-header { font-size: 1rem; color: #B3B3B3; margin-top: 0; font-weight: 300; }
+
+    /* Glassmorphism KPI Panel */
     .kpi-panel {
-        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-        border-radius: 16px; padding: 24px; text-align: center;
-        border: 1px solid #2a2a4a; margin-bottom: 24px;
-        transition: border-color 0.2s, transform 0.2s;
+        background: rgba(18,18,18,0.85); backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(245,197,66,0.15); border-radius: 16px; padding: 24px;
+        text-align: center; margin-bottom: 24px;
+        transition: all 0.3s cubic-bezier(0.4,0,0.2,1);
+        box-shadow: 0 4px 24px rgba(0,0,0,0.4);
     }
-    .kpi-panel:hover { border-color: #00d4aa; transform: translateY(-2px); }
-    .kpi-value { font-size: 2.2rem; font-weight: 700; color: #00d4aa; line-height: 1.2; }
-    .kpi-label {
-        font-size: 0.8rem; color: #888; text-transform: uppercase;
-        letter-spacing: 0.5px; margin-top: 6px;
+    .kpi-panel:hover {
+        border-color: rgba(245,197,66,0.5); transform: translateY(-4px);
+        box-shadow: 0 8px 32px rgba(212,175,55,0.1);
     }
-    .kpi-delta { font-size: 0.85rem; margin-top: 4px; }
-    .kpi-delta.up { color: #00d4aa; }
-    .kpi-delta.down { color: #ff6b6b; }
+    .kpi-value { font-size: 2.2rem; font-weight: 700; color: #F5C542; line-height: 1.2; text-shadow: 0 0 20px rgba(245,197,66,0.15); }
+    .kpi-label { font-size: 0.8rem; color: #B3B3B3; text-transform: uppercase; letter-spacing: 1px; margin-top: 6px; font-weight: 500; }
+    .kpi-delta { font-size: 0.85rem; margin-top: 4px; font-weight: 500; }
+    .kpi-delta.up { color: #00C853; }
+    .kpi-delta.down { color: #FF5252; }
+
+    /* Glassmorphism Asset Card */
     .asset-card {
-        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-        border-radius: 12px; padding: 16px; border: 1px solid #2a2a4a;
-        margin-bottom: 12px; transition: border-color 0.2s;
+        background: rgba(18,18,18,0.85); backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        border: 1px solid rgba(255,255,255,0.06); border-radius: 12px;
+        padding: 16px; margin-bottom: 12px;
+        transition: all 0.3s cubic-bezier(0.4,0,0.2,1);
+        box-shadow: 0 2px 16px rgba(0,0,0,0.3);
     }
-    .asset-card:hover { border-color: #00d4aa; }
-    .asset-symbol { font-size: 1.1rem; font-weight: 600; color: #e0e0e0; }
-    .asset-price { font-size: 1.4rem; font-weight: 700; color: #fff; }
-    .asset-change { font-size: 0.9rem; }
-    .asset-change.pos { color: #00d4aa; }
-    .asset-change.neg { color: #ff6b6b; }
+    .asset-card:hover { border-color: rgba(245,197,66,0.4); transform: translateY(-2px); box-shadow: 0 4px 24px rgba(212,175,55,0.08); }
+    .asset-symbol { font-size: 1.1rem; font-weight: 600; color: #FFFFFF; }
+    .asset-price { font-size: 1.4rem; font-weight: 700; color: #FFFFFF; }
+    .asset-change { font-size: 0.9rem; font-weight: 500; }
+    .asset-change.pos { color: #00C853; }
+    .asset-change.neg { color: #FF5252; }
+
+    /* Nav Card */
     .nav-card {
-        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-        border-radius: 12px; padding: 18px; border: 1px solid #2a2a4a;
-        cursor: pointer; transition: border-color 0.2s, transform 0.2s; margin-bottom: 12px;
+        background: rgba(18,18,18,0.85); backdrop-filter: blur(8px);
+        border: 1px solid rgba(255,255,255,0.06); border-radius: 12px;
+        padding: 18px; cursor: pointer;
+        transition: all 0.3s cubic-bezier(0.4,0,0.2,1); margin-bottom: 12px;
     }
-    .nav-card:hover { border-color: #00d4aa; transform: translateY(-2px); }
-    .nav-card-title { font-size: 1rem; font-weight: 600; color: #e0e0e0; }
-    .nav-card-desc { font-size: 0.78rem; color: #888; margin-top: 2px; }
-    .badge {
-        display: inline-block; padding: 2px 10px; border-radius: 999px;
-        font-size: 0.7rem; font-weight: 600; letter-spacing: 0.3px;
-    }
-    .badge-up { background: rgba(0,212,170,0.15); color: #00d4aa; }
-    .badge-down { background: rgba(255,107,107,0.15); color: #ff6b6b; }
-    .badge-na { background: rgba(136,136,136,0.15); color: #888; }
-    .badge-correct { background: rgba(0,212,170,0.15); color: #00d4aa; }
-    .badge-incorrect { background: rgba(255,107,107,0.15); color: #ff6b6b; }
-    .gauge-container {
-        display: flex; justify-content: center; align-items: center;
-        padding: 12px 0;
-    }
-    .stTabs [data-baseweb="tab-list"] { gap: 8px; }
-    .stTabs [data-baseweb="tab"] {
-        border-radius: 8px; padding: 8px 16px; font-size: 0.85rem;
-    }
-    .stTabs [aria-selected="true"] { background: rgba(0,212,170,0.15); }
-    .leaderboard-row {
-        display: flex; justify-content: space-between; align-items: center;
-        padding: 8px 12px; border-bottom: 1px solid #1e1e3a; font-size: 0.85rem;
-    }
+    .nav-card:hover { border-color: rgba(245,197,66,0.4); transform: translateY(-2px); }
+    .nav-card-title { font-size: 1rem; font-weight: 600; color: #FFFFFF; }
+    .nav-card-desc { font-size: 0.78rem; color: #B3B3B3; margin-top: 2px; }
+
+    /* Badges */
+    .badge { display: inline-block; padding: 3px 12px; border-radius: 999px; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; }
+    .badge-up { background: linear-gradient(135deg,rgba(0,200,83,0.15),rgba(0,200,83,0.05)); color: #00C853; border: 1px solid rgba(0,200,83,0.2); }
+    .badge-down { background: linear-gradient(135deg,rgba(255,82,82,0.15),rgba(255,82,82,0.05)); color: #FF5252; border: 1px solid rgba(255,82,82,0.2); }
+    .badge-na { background: rgba(179,179,179,0.1); color: #B3B3B3; border: 1px solid rgba(179,179,179,0.15); }
+    .badge-correct { background: linear-gradient(135deg,rgba(0,200,83,0.15),rgba(0,200,83,0.05)); color: #00C853; border: 1px solid rgba(0,200,83,0.2); }
+    .badge-incorrect { background: linear-gradient(135deg,rgba(255,82,82,0.15),rgba(255,82,82,0.05)); color: #FF5252; border: 1px solid rgba(255,82,82,0.2); }
+    .badge-gold { background: linear-gradient(135deg,rgba(245,197,66,0.15),rgba(212,175,55,0.05)); color: #F5C542; border: 1px solid rgba(245,197,66,0.25); }
+
+    /* Confidence Gauge */
+    .gauge-container { display: flex; justify-content: center; align-items: center; padding: 12px 0; }
+
+    /* Tabs */
+    .stTabs [data-baseweb="tab-list"] { gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+    .stTabs [data-baseweb="tab"] { border-radius: 8px; padding: 8px 16px; font-size: 0.85rem; font-weight: 500; color: #B3B3B3; transition: all 0.2s; }
+    .stTabs [aria-selected="true"] { background: rgba(245,197,66,0.12); color: #F5C542; }
+
+    /* Leaderboard */
+    .leaderboard-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 0.85rem; }
     .leaderboard-row:last-child { border-bottom: none; }
-    .leaderboard-rank { font-weight: 700; color: #888; width: 24px; }
-    .leaderboard-name { flex: 1; color: #e0e0e0; }
-    .leaderboard-score { font-weight: 600; color: #00d4aa; min-width: 40px; text-align: right; }
-    footer { display: none; }
-    hr { border-color: #2a2a4a; margin: 24px 0; }
-    div[data-testid="stMetric"] {
-        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-        border-radius: 12px; padding: 16px; border: 1px solid #2a2a4a;
-    }
-    div[data-testid="stMetric"] > div:first-child {
-        font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.3px;
-    }
-    div[data-testid="stMetric"] > div:nth-child(2) { font-size: 1.5rem; font-weight: 700; }
+    .leaderboard-rank { font-weight: 700; color: #B3B3B3; width: 24px; }
+    .leaderboard-name { flex: 1; color: #FFFFFF; }
+    .leaderboard-score { font-weight: 600; color: #F5C542; min-width: 40px; text-align: right; }
+
+    /* Metric Cards */
+    div[data-testid="stMetric"] { background: rgba(18,18,18,0.85); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; padding: 16px; transition: all 0.3s; box-shadow: 0 2px 12px rgba(0,0,0,0.2); }
+    div[data-testid="stMetric"]:hover { border-color: rgba(245,197,66,0.3); }
+    div[data-testid="stMetric"] > div:first-child { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; color: #B3B3B3; font-weight: 500; }
+    div[data-testid="stMetric"] > div:nth-child(2) { font-size: 1.5rem; font-weight: 700; color: #FFFFFF; }
+
+    /* Sidebar */
+    section[data-testid="stSidebar"] { background: linear-gradient(180deg, #0A0A0A 0%, #121212 100%); border-right: 1px solid rgba(245,197,66,0.08); }
+    section[data-testid="stSidebar"] a { color: #B3B3B3; transition: all 0.2s; border-radius: 8px; padding: 4px 8px; }
+    section[data-testid="stSidebar"] a:hover, section[data-testid="stSidebar"] a:focus { color: #F5C542; background: rgba(245,197,66,0.08); }
+
+    /* Buttons */
+    .stButton button { border-radius: 8px; font-weight: 600; transition: all 0.3s; border: 1px solid rgba(245,197,66,0.2); background: rgba(18,18,18,0.85); color: #F5C542; }
+    .stButton button:hover { border-color: #F5C542; background: rgba(245,197,66,0.1); box-shadow: 0 0 20px rgba(245,197,66,0.1); }
+    .stButton button[kind="primary"] { background: linear-gradient(135deg, #F5C542, #D4AF37); color: #0A0A0A; border: none; font-weight: 700; }
+    .stButton button[kind="primary"]:hover { background: linear-gradient(135deg, #FFD666, #E5C040); box-shadow: 0 4px 20px rgba(245,197,66,0.3); }
+
+    /* Dividers */
+    hr, .stDivider { border-color: rgba(255,255,255,0.06); margin: 24px 0; }
+
+    /* DataFrames */
+    div[data-testid="stDataFrame"] { background: transparent; border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; overflow: hidden; }
+
+    /* Headers */
+    h1, h2, h3, h4, h5, h6 { color: #FFFFFF; }
+    h5 { color: #F5C542; font-weight: 600; letter-spacing: 0.3px; }
+
+    /* Expander */
+    div[data-testid="stExpander"] { background: rgba(18,18,18,0.85); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; backdrop-filter: blur(8px); }
+
+    /* Info / Warning / Error */
+    div[data-testid="stInfo"] { background: rgba(245,197,66,0.08); border: 1px solid rgba(245,197,66,0.15); color: #F5C542; }
+    div[data-testid="stWarning"] { background: rgba(255,82,82,0.08); border: 1px solid rgba(255,82,82,0.15); color: #FF5252; }
+    div[data-testid="stError"] { background: rgba(255,82,82,0.15); border: 1px solid #FF5252; color: #FF5252; }
+
+    /* Selectbox */
+    div[data-baseweb="select"] > div { background: rgba(18,18,18,0.85); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; }
+
+    /* Spinner */
+    div[data-testid="stSpinner"] { color: #F5C542; }
+
+    /* Footer */
+    .dashboard-footer { text-align: center; padding: 20px 0; border-top: 1px solid rgba(255,255,255,0.06); margin-top: 40px; color: #B3B3B3; font-size: 0.75rem; }
+    .dashboard-footer .version { color: #F5C542; font-weight: 600; }
+    .dashboard-footer .copyright { color: #666; }
+
+    /* Logo */
+    .dashboard-logo { display: flex; align-items: center; gap: 12px; padding: 8px 0; }
+    .dashboard-logo .logo-icon { width: 36px; height: 36px; background: linear-gradient(135deg, #F5C542, #D4AF37); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; font-weight: 800; color: #0A0A0A; }
+    .dashboard-logo .logo-text { font-size: 1.1rem; font-weight: 700; color: #FFFFFF; letter-spacing: -0.02em; }
+    .dashboard-logo .logo-subtext { font-size: 0.7rem; color: #B3B3B3; letter-spacing: 1px; text-transform: uppercase; }
+
+    /* Status indicators */
+    .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+    .status-dot.online { background: #00C853; box-shadow: 0 0 8px rgba(0,200,83,0.5); }
+    .status-dot.offline { background: #FF5252; box-shadow: 0 0 8px rgba(255,82,82,0.5); }
+    .status-dot.pending { background: #F5C542; box-shadow: 0 0 8px rgba(245,197,66,0.5); }
+
+    /* Confidence bar */
+    .confidence-bar { height: 6px; border-radius: 3px; background: linear-gradient(90deg, #FF5252, #F5C542, #00C853); margin-top: 4px; transition: width 0.5s ease; }
+
+    /* Chart container */
+    .chart-container { background: rgba(18,18,18,0.85); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; padding: 16px; backdrop-filter: blur(8px); }
     </style>""",
     unsafe_allow_html=True,
 )
@@ -340,7 +406,7 @@ def _asset_mini_card(symbol: str) -> None:
         st.markdown(
             f'<div class="asset-card"><div class="asset-symbol">'
             f"{SYMBOL_DISPLAY.get(symbol, symbol)}</div>"
-            f'<div style="color:#888;font-size:0.8rem;">No data</div></div>',
+            f'<div style="color:#B3B3B3;font-size:0.8rem;">No data</div></div>',
             unsafe_allow_html=True,
         )
         return
@@ -362,12 +428,25 @@ def _asset_mini_card(symbol: str) -> None:
         f'<span class="asset-change {cls}" style="font-size:0.8rem;">{pct_change}</span>'
         f"</div>"
         f'<div class="asset-price" style="font-size:1.2rem;">${last_c:,.2f}</div>'
-        f'<div style="font-size:0.7rem;color:#888;margin-top:6px;">'
+        f'<div style="font-size:0.7rem;color:#B3B3B3;margin-top:6px;">'
         f'<span>{"🟢" if raw_ok else "⚪"} {status["raw"]:,}r</span> '
         f'<span>{"🟢" if feat_ok else "⚪"} {status["features"]:,}f</span> '
         f'<span>{"🟢" if lbl_ok else "⚪"} {status["labels"]:,}l</span> '
         f'<span>🧠 {status["models"]}m</span>'
         f"</div></div>",
+        unsafe_allow_html=True,
+    )
+
+
+# ── Footer Helper ────────────────────────────────────────────────────
+
+
+def _render_footer() -> None:
+    st.markdown(
+        '<div class="dashboard-footer">'
+        '<span class="version">AI Candle Predictor v0.1.0</span> \u00b7 '
+        '<span class="copyright">&copy; 2026 Institutional Quant Platform</span>'
+        "</div>",
         unsafe_allow_html=True,
     )
 
@@ -443,7 +522,7 @@ def page_home() -> None:
             import pandas as pd
 
             def _highlight_top(row: pd.Series) -> list[str]:
-                hl = "background: rgba(0,212,170,0.08)"
+                hl = "background: rgba(245,197,66,0.08)"
                 return [hl if row["Rank"] == 1 else "" for _ in row]
 
             lb_df = pd.DataFrame(
@@ -491,7 +570,7 @@ def page_home() -> None:
                 go.Bar(
                     x=metrics_names,
                     y=metrics_vals,
-                    marker_color=["#00d4aa", "#ffd700", "#ff6b6b", "#4fc3f7", "#ab47bc"],
+                    marker_color=["#F5C542", "#D4AF37", "#FF5252", "#00C853", "#B3B3B3"],
                     text=[f"{v:.4f}" for v in metrics_vals],
                     textposition="outside",
                 )
@@ -524,12 +603,12 @@ def page_home() -> None:
             for entry in recent:
                 date_str = entry.training_date[:19].replace("T", " ")
                 st.markdown(
-                    f'<div style="padding:6px 8px;border-left:3px solid #00d4aa;'
+                    f'<div style="padding:6px 8px;border-left:3px solid #F5C542;'
                     f'margin-bottom:6px;font-size:0.8rem;">'
-                    f'<span style="color:#00d4aa;font-weight:600;">'
+                    f'<span style="color:#F5C542;font-weight:600;">'
                     f"{entry.model_type}</span> "
                     f'<span style="color:#e0e0e0;">on {entry.symbol}</span><br>'
-                    f'<span style="color:#888;">AUC {entry.roc_auc:.4f} · '
+                    f'<span style="color:#B3B3B3;">AUC {entry.roc_auc:.4f} · '
                     f"Acc {entry.accuracy:.4f} · {date_str}</span></div>",
                     unsafe_allow_html=True,
                 )
@@ -584,6 +663,7 @@ def page_home() -> None:
             st.info("Train models to populate the training history.")
 
     st.caption(f"Data: {RAW_DIR} · Registry: {settings.models_dir / 'registry.json'}")
+    _render_footer()
 
 
 # ── Page: Data Pipeline ────────────────────────────────────────────────────────
@@ -646,7 +726,7 @@ def _asset_pipeline_card(symbol: str) -> None:
         f'<div class="asset-card" style="padding:20px;">'
         f'<div style="display:flex;justify-content:space-between;align-items:center;">'
         f'<div><span class="asset-symbol">{display}</span>'
-        f'<span style="font-size:0.75rem;color:#888;margin-left:8px;">{symbol}</span></div>'
+        f'<span style="font-size:0.75rem;color:#B3B3B3;margin-left:8px;">{symbol}</span></div>'
         f"</div>"
         f'<div style="display:flex;gap:24px;margin:12px 0;font-size:0.85rem;">'
         f'<div>{"✅" if status["raw"] > 0 else "⬜"} Raw: {status["raw"]:,}</div>'
@@ -722,6 +802,7 @@ def page_data_pipeline() -> None:
     if stepper:
         for sym in SYMBOLS:
             _asset_pipeline_card(sym)
+    _render_footer()
 
 
 # ── Page: Market Overview ────────────────────────────────────────────────────
@@ -820,7 +901,7 @@ def page_market_overview() -> None:
             x=dff.index,
             y=dff["volume"],
             name="Volume",
-            marker_color="rgba(0,212,170,0.3)",
+            marker_color="rgba(245,197,66,0.3)",
             showlegend=False,
         ),
         row=2,
@@ -838,6 +919,7 @@ def page_market_overview() -> None:
 
     with st.expander("Raw Data Table"):
         st.dataframe(dff.tail(100), width="stretch")
+    _render_footer()
 
 
 # ── Page: Predictions ────────────────────────────────────────────────────────
@@ -993,7 +1075,7 @@ def page_predictions() -> None:
                     y=df_display["close"],
                     mode="lines",
                     name="Close",
-                    line=dict(color="#888", width=1),
+                    line=dict(color="#B3B3B3", width=1),
                 )
             )
             up_mask = df_display["predicted"] == "UP"
@@ -1004,7 +1086,7 @@ def page_predictions() -> None:
                     y=df_display.loc[up_mask, "close"],
                     mode="markers",
                     name="Predicted UP",
-                    marker=dict(color="#00d4aa", size=6, symbol="triangle-up"),
+                    marker=dict(color="#F5C542", size=6, symbol="triangle-up"),
                 )
             )
             fig_timeline.add_trace(
@@ -1013,7 +1095,7 @@ def page_predictions() -> None:
                     y=df_display.loc[down_mask, "close"],
                     mode="markers",
                     name="Predicted DOWN",
-                    marker=dict(color="#ff6b6b", size=6, symbol="triangle-down"),
+                    marker=dict(color="#FF5252", size=6, symbol="triangle-down"),
                 )
             )
             fig_timeline.update_layout(
@@ -1034,7 +1116,7 @@ def page_predictions() -> None:
                     y=df_display["confidence"],
                     mode="lines+markers",
                     name="Confidence",
-                    line=dict(color="#00d4aa", width=2),
+                    line=dict(color="#F5C542", width=2),
                     marker=dict(
                         color=df_display["confidence"],
                         colorscale="tealgrn",
@@ -1047,7 +1129,7 @@ def page_predictions() -> None:
             fig_conf.add_hline(
                 y=0.5,
                 line_dash="dash",
-                line_color="#888",
+                line_color="#B3B3B3",
                 annotation_text="Random (0.5)",
             )
             fig_conf.update_layout(
@@ -1074,7 +1156,7 @@ def page_predictions() -> None:
                     y=labeled_sorted["cumulative_accuracy"],
                     mode="lines",
                     name="Cumulative",
-                    line=dict(color="#00d4aa", width=2),
+                    line=dict(color="#F5C542", width=2),
                 )
             )
             fig_acc.add_trace(
@@ -1083,13 +1165,13 @@ def page_predictions() -> None:
                     y=labeled_sorted["rolling_accuracy"],
                     mode="lines",
                     name=f"Rolling ({window})",
-                    line=dict(color="#ffd700", width=2, dash="dot"),
+                    line=dict(color="#D4AF37", width=2, dash="dot"),
                 )
             )
             fig_acc.add_hline(
                 y=0.5,
                 line_dash="dash",
-                line_color="#888",
+                line_color="#B3B3B3",
                 annotation_text="Random (0.5)",
             )
             fig_acc.update_layout(
@@ -1109,13 +1191,13 @@ def page_predictions() -> None:
             if not pos_conf.empty:
                 fig_dist.add_trace(
                     go.Histogram(
-                        x=pos_conf, name="Up (actual)", opacity=0.7, marker_color="#00d4aa"
+                        x=pos_conf, name="Up (actual)", opacity=0.7, marker_color="#F5C542"
                     )
                 )
             if not neg_conf.empty:
                 fig_dist.add_trace(
                     go.Histogram(
-                        x=neg_conf, name="Down (actual)", opacity=0.7, marker_color="#ff6b6b"
+                        x=neg_conf, name="Down (actual)", opacity=0.7, marker_color="#FF5252"
                     )
                 )
             fig_dist.update_layout(
@@ -1144,6 +1226,7 @@ def page_predictions() -> None:
         .style.format({"Confidence": "{:.4f}"})
     )
     st.dataframe(styled, width="stretch", height=500)
+    _render_footer()
 
 
 # ── Page: Model Comparison ───────────────────────────────────────────────────
@@ -1234,7 +1317,7 @@ def page_model_comparison() -> None:
         st.dataframe(
             leaderboard_df.pivot(index="Metric", columns="Model", values="Score")
             .style.format("{:.4f}")
-            .highlight_max(color="rgba(0,212,170,0.2)", axis=1),
+            .highlight_max(color="rgba(245,197,66,0.2)", axis=1),
             width="stretch",
         )
 
@@ -1242,7 +1325,7 @@ def page_model_comparison() -> None:
 
         categories = list(metrics.keys())
         fig_radar = go.Figure()
-        colors = {"LR": "#00d4aa", "RF": "#ffd700", "XGB": "#ff6b6b"}
+        colors = {"LR": "#F5C542", "RF": "#D4AF37", "XGB": "#FF5252"}
         for mk in ("LR", "RF", "XGB"):
             fig_radar.add_trace(
                 go.Scatterpolar(
@@ -1271,7 +1354,7 @@ def page_model_comparison() -> None:
                     x=rf_df["Importance"],
                     y=rf_df["Feature"],
                     orientation="h",
-                    marker_color="#ffd700",
+                    marker_color="#D4AF37",
                 )
             )
             fig_rf.update_layout(
@@ -1292,7 +1375,7 @@ def page_model_comparison() -> None:
                     x=xgb_df["Importance"],
                     y=xgb_df["Feature"],
                     orientation="h",
-                    marker_color="#ff6b6b",
+                    marker_color="#FF5252",
                 )
             )
             fig_xgb.update_layout(
@@ -1302,6 +1385,7 @@ def page_model_comparison() -> None:
                 margin=dict(l=0, r=0, t=30, b=0),
             )
             st.plotly_chart(fig_xgb, width="stretch")
+    _render_footer()
 
 
 # ── Page: Explainability ─────────────────────────────────────────────────────
@@ -1336,6 +1420,7 @@ def page_explainability() -> None:
 
     with lcl:
         _explain_local(symbol, model_name)
+    _render_footer()
 
 
 def _explain_global(symbol: str, model_name: str) -> None:
@@ -1412,7 +1497,7 @@ def _explain_global(symbol: str, model_name: str) -> None:
                         x=[v for _, v in top10],
                         y=[k for k, _ in top10],
                         orientation="h",
-                        marker_color="#00d4aa",
+                        marker_color="#F5C542",
                     )
                 )
                 fig.update_layout(
@@ -1541,7 +1626,7 @@ def _explain_local(symbol: str, _model_name: str) -> None:
             fig = go.Figure()
             vals = [t["shap_value"] for t in top]
             names = [t["feature"] for t in top]
-            colors = ["#00d4aa" if v >= 0 else "#ff6b6b" for v in vals]
+            colors = ["#F5C542" if v >= 0 else "#FF5252" for v in vals]
             fig.add_trace(
                 go.Bar(
                     x=vals,
@@ -1665,6 +1750,7 @@ def page_training_center() -> None:
             st.caption(f"Validation samples: {metrics.support}")
         except Exception as e:
             st.error(f"Training failed: {e}")
+    _render_footer()
 
 
 # ── Page: Backtesting ─────────────────────────────────────────────────────────
@@ -1784,9 +1870,9 @@ def page_backtesting() -> None:
                     y=eq_df["equity"],
                     mode="lines",
                     name="Strategy",
-                    line=dict(color="#00d4aa", width=2),
+                    line=dict(color="#F5C542", width=2),
                     fill="tozeroy",
-                    fillcolor="rgba(0,212,170,0.1)",
+                    fillcolor="rgba(245,197,66,0.1)",
                 )
             )
             bh_equity = [bt.initial_capital * (1 + bt.buy_hold_return_pct / 100)] * len(eq_df)
@@ -1796,7 +1882,7 @@ def page_backtesting() -> None:
                     y=bh_equity,
                     mode="lines",
                     name="Buy & Hold",
-                    line=dict(color="#888", width=1, dash="dot"),
+                    line=dict(color="#B3B3B3", width=1, dash="dot"),
                 )
             )
             fig_eq.add_hline(
@@ -1827,7 +1913,7 @@ def page_backtesting() -> None:
                         for t in bt.trades
                     ]
                 )
-                colors = ["#00d4aa" if w else "#ff6b6b" for w in trades_df["won"]]
+                colors = ["#F5C542" if w else "#FF5252" for w in trades_df["won"]]
                 fig_td = go.Figure()
                 fig_td.add_trace(
                     go.Bar(
@@ -1859,7 +1945,7 @@ def page_backtesting() -> None:
             if bt.monthly_returns:
                 months = sorted(bt.monthly_returns.keys())
                 m_rets = [bt.monthly_returns[m] for m in months]
-                m_colors = ["#00d4aa" if r >= 0 else "#ff6b6b" for r in m_rets]
+                m_colors = ["#F5C542" if r >= 0 else "#FF5252" for r in m_rets]
                 fig_mr = go.Figure()
                 fig_mr.add_trace(
                     go.Bar(
@@ -1904,6 +1990,7 @@ def page_backtesting() -> None:
                 ]
             )
             st.dataframe(tl_df, width="stretch", height=400)
+    _render_footer()
 
 
 # ── Page: About ───────────────────────────────────────────────────────────────
@@ -1975,7 +2062,23 @@ def page_about() -> None:
             st.metric("Python", platform.python_version())
             st.metric("Platform", platform.platform())
             st.metric("Dashboard", settings.dashboard_title)
+    _render_footer()
 
+
+# ── Sidebar Logo ────────────────────────────────────────────────────────────
+
+with st.sidebar:
+    st.markdown(
+        '<div class="dashboard-logo">'
+        '<div class="logo-icon">AI</div>'
+        "<div>"
+        '<div class="logo-text">Candle Predictor</div>'
+        '<div class="logo-subtext">Institutional Quant Platform</div>'
+        "</div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+    st.divider()
 
 # ── Navigation ────────────────────────────────────────────────────────────────
 
