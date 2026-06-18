@@ -27,6 +27,7 @@ This changelog records all updates, files added, files modified, and engineering
 ### 4. GitHub Professionalization & Showcases
 - **[MODIFY] [README.md](file:///c:/Dev/Projects/ai-driven-candle-stick-prediction/README.md)**: Rewrote the project documentation completely. Added shields/badges, clean features grids, architecture descriptions, mathematical formulas for labeling and backtesting metrics, and high-impact resume bullets.
 - **[NEW] [PROJECT_SHOWCASE.md](file:///c:/Dev/Projects/ai-driven-candle-stick-prediction/PROJECT_SHOWCASE.md)**: Created a portfolio showcase guide highlighting engineering patterns, Clean Architecture decoupling, and backtest alphas for technical hiring managers.
+- **[MODIFY] [.github/workflows/ci.yml](file:///c:/Dev/Projects/ai-driven-candle-stick-prediction/.github/workflows/ci.yml)**: Updated dependencies installation step to use `--all-extras` so FastAPI and ML packages are available on CI.
 - **[NEW] [.github/ISSUE_TEMPLATE/bug_report.md](file:///c:/Dev/Projects/ai-driven-candle-stick-prediction/.github/ISSUE_TEMPLATE/bug_report.md)**: Standardized bug logging format.
 - **[NEW] [.github/ISSUE_TEMPLATE/feature_request.md](file:///c:/Dev/Projects/ai-driven-candle-stick-prediction/.github/ISSUE_TEMPLATE/feature_request.md)**: Structured enhancement suggestions template.
 - **[NEW] [.github/PULL_REQUEST_TEMPLATE.md](file:///c:/Dev/Projects/ai-driven-candle-stick-prediction/.github/PULL_REQUEST_TEMPLATE.md)**: Code review checkbox checklist.
