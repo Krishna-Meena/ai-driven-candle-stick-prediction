@@ -16,11 +16,15 @@ Built with **Clean Architecture** and **strict dependency inversion**.
 
 ## Live Demo
 
-> *Demo GIF coming soon 
+> *Full demo GIF coming soon — record with OBS Studio or ScreenToGif at 1920×1080.*
+
+Navigate through all 7 pages:
 
 ```
-Home → Market Overview → Training Center → Predictions → Model Comparison → Backtesting → About
+Home → Market Overview → Predictions → Training Center → Backtesting → Model Comparison → About
 ```
+
+See screenshots below for each page.
 
 ---
 
@@ -119,7 +123,15 @@ Model Insights (feature importance, metrics) → Dashboard
 
 ## Screenshots
 
-> *Add screenshots here — capture each dashboard page and save to `docs/screenshots/`.*
+| Page | Preview |
+|------|---------|
+| **Home** — Executive dashboard | ![Home](docs/screenshots/home.png) |
+| **Market Overview** — Candlestick charts | ![Market Overview](docs/screenshots/market-overview.png) |
+| **Predictions** — Date range prediction | ![Predictions](docs/screenshots/predictions.png) |
+| **Training Center** — Model training | ![Training Center](docs/screenshots/training-center.png) |
+| **Backtesting** — Strategy simulation | ![Backtesting](docs/screenshots/backtesting.png) |
+| **Model Comparison** — Performance leaderboard | ![Model Comparison](docs/screenshots/model-comparison.png) |
+| **About** — Architecture & tech stack | ![About](docs/screenshots/about.png) |
 
 ---
 
