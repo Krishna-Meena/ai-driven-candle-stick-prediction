@@ -16,7 +16,7 @@ Built with **Clean Architecture** and **strict dependency inversion**.
 
 ## Live Demo
 
-> *Demo GIF coming soon — record with OBS Studio or ScreenToGif at 1920×1080.*
+> *Demo GIF coming soon 
 
 ```
 Home → Market Overview → Training Center → Predictions → Model Comparison → Backtesting → About
