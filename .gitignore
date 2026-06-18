@@ -43,7 +43,11 @@ models/**/*.onnx
 models/**/*.pt
 models/**/*.h5
 models/**/*.keras
+models/registry.json
 !models/**/.gitkeep
+
+# ─── Logs ────────────────────────────────────────────────
+streamlit_*.txt
 
 # ─── Notebooks ───────────────────────────────────────────
 notebooks/.ipynb_checkpoints/

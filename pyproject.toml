@@ -82,6 +82,9 @@ inference = [
 [project.urls]
 Repository = "https://github.com/yourusername/ai-candle-predictor"
 
+[project.scripts]
+ai-candle-predictor = "ai_candle_predictor.presentation.cli.main:app"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -106,6 +109,10 @@ select = ["E", "F", "I", "N", "W", "UP", "B", "SIM", "ARG"]
 "**/use_cases/train_xgboost.py" = ["N803", "N806"]
 "**/use_cases/tune_hyperparameters.py" = ["N803", "N806"]
 "**/dashboard/app.py" = ["E402", "E501", "N806"]
+"**/presentation/cli/main.py" = ["E402", "E501"]
+"**/presentation/api/main.py" = ["E402", "E501"]
+"**/tests/unit/test_cli.py" = ["E501"]
+"**/tests/unit/test_api.py" = ["E501"]
 "**/test_feature_utils.py" = ["N806"]
 
 [tool.ruff.format]
@@ -134,4 +141,5 @@ dev = [
     "black>=24",
     "mypy>=1.13",
     "pre-commit>=4",
+    "httpx>=0.28.1",
 ]
