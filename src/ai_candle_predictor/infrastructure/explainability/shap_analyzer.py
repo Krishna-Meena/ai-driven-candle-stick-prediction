@@ -32,6 +32,11 @@ def check_shap() -> None:
         raise RuntimeError("SHAP is not installed.  Run: uv add shap")
 
 
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+
 def shap_analysis(
     symbol: str,
     pipeline: Pipeline,
@@ -49,6 +54,8 @@ def shap_analysis(
         symbol=symbol,
         samples=X_arr.shape[0],
         features=X_arr.shape[1],
+        X_type=type(X).__name__,
+        X_dtype=str(X_arr.dtype),
     )
 
     X_bg = _select_background(X_arr, max_samples)
@@ -61,12 +68,15 @@ def shap_analysis(
         explainer_type=type(explainer).__name__,
     )
     shap_vals = explainer.shap_values(X_arr)
-    vals, base = _extract_binary(shap_vals)
+    log.debug("shap_values returned", shap_type=type(shap_vals).__name__)
+
+    vals, base = _normalize_shap_output(shap_vals)
+    log.debug("normalized shap output", vals_shape=vals.shape, base_shape=base.shape)
 
     bar_explanation = shap.Explanation(
-        values=shap_vals,
+        values=vals,
         base_values=base,
-        data=X,
+        data=X_arr,
         feature_names=feature_names,
     )
 
@@ -86,7 +96,7 @@ def shap_analysis(
         "bar_plot": bar_path,
         "global_ranking": ranking,
         "local_explanations": local,
-        "samples_analyzed": len(X),
+        "samples_analyzed": int(vals.shape[0]),
     }
 
 
@@ -106,6 +116,7 @@ def explain_single_sample(
         "explain_single_sample started",
         X_shape=X_arr.shape,
         X_ndim=X_arr.ndim,
+        X_type=type(X).__name__,
         sample_index=sample_index,
     )
 
@@ -118,37 +129,107 @@ def explain_single_sample(
         explainer_type=type(explainer).__name__,
     )
     shap_vals = explainer.shap_values(X_arr)
+    log.debug("shap_values returned", shap_type=type(shap_vals).__name__)
 
-    sample = shap_vals[sample_index : sample_index + 1]
-    base_val = float(
-        sample.base_values[0] if isinstance(sample.base_values, np.ndarray) else sample.base_values
+    vals, base = _normalize_shap_output(shap_vals)
+    log.debug("normalized shap output", vals_shape=vals.shape, base_shape=base.shape)
+
+    sample_values = vals[sample_index : sample_index + 1]
+    sample_base = float(base[sample_index] if isinstance(base, np.ndarray) else base)
+    pred = float(sample_values.sum() + sample_base)
+
+    sample_explanation = shap.Explanation(
+        values=sample_values,
+        base_values=sample_base,
+        data=X_arr[sample_index : sample_index + 1],
+        feature_names=feature_names,
     )
-    prediction = float(sample.values.sum() + base_val)
 
-    waterfall_path = _save_waterfall(sample, feature_names, sample_index, symbol, image_storage)
-    force_html = _render_force_html(sample, feature_names)
+    waterfall_path = _save_waterfall(
+        sample_explanation, feature_names, sample_index, symbol, image_storage
+    )
+    force_html = _render_force_html(sample_explanation, feature_names)
 
-    vals_i = sample.values[0]
+    vals_i = sample_values[0]
     top_idx = np.argsort(np.abs(vals_i))[::-1][:10]
     top_features = [
         {"feature": feature_names[j], "shap_value": round(float(vals_i[j]), 6)} for j in top_idx
     ]
 
     return {
-        "base_value": base_val,
-        "prediction": prediction,
+        "base_value": sample_base,
+        "prediction": pred,
         "waterfall_plot": str(waterfall_path),
         "force_html": force_html,
         "top_features": top_features,
     }
 
 
-def _select_background(X: NDArray[Any], max_samples: int = 100) -> NDArray[Any]:
-    """Subsample *X* to at most *max_samples* rows, preserving 2-D shape.
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
 
-    Returns the actual feature rows, *not* integer indices.
-    When the dataset is small enough the full array is returned unchanged.
+
+def _normalize_shap_output(shap_values: Any) -> tuple[NDArray[Any], NDArray[Any]]:
+    """Convert any SHAP explainer output to a uniform (values, base_values) pair.
+
+    Handles:
+    * ``shap.Explanation`` objects (SHAP >= 0.42)
+    * ``numpy.ndarray`` (older SHAP or raw return)
+    * ``list`` of arrays or Explanations (multi-class / multi-output)
+
+    Returns
+    -------
+    values : ndarray, shape ``(n_samples, n_features)``
+    base_values : ndarray, shape ``(n_samples,)``
     """
+    import shap
+
+    log.debug("normalizing SHAP output", input_type=type(shap_values).__name__)
+
+    if isinstance(shap_values, shap.Explanation):
+        vals = np.asarray(shap_values.values, dtype=np.float64)
+        base = np.asarray(shap_values.base_values, dtype=np.float64)
+    elif isinstance(shap_values, list):
+        log.debug("SHAP output is a list", length=len(shap_values))
+        extracted: list[NDArray[np.float64]] = []
+        extracted_base: list[NDArray[np.float64]] = []
+        for item in shap_values:
+            if isinstance(item, shap.Explanation):
+                extracted.append(np.asarray(item.values, dtype=np.float64))
+                extracted_base.append(np.asarray(item.base_values, dtype=np.float64))
+            else:
+                extracted.append(np.asarray(item, dtype=np.float64))
+                extracted_base.append(np.zeros(extracted[-1].shape[0]))
+        vals = np.stack(extracted, axis=0)
+        base = np.stack(extracted_base, axis=0)
+    elif isinstance(shap_values, np.ndarray):
+        vals = np.asarray(shap_values, dtype=np.float64)
+        base = np.zeros(vals.shape[0], dtype=np.float64)
+    else:
+        raise TypeError(f"unexpected SHAP output type: {type(shap_values)}")
+
+    vals, base = _extract_binary(vals, base)
+    return vals, base
+
+
+def _extract_binary(vals: NDArray[Any], base: NDArray[Any]) -> tuple[NDArray[Any], NDArray[Any]]:
+    """Extract the positive-class (class 1) values from a binary classifier output.
+
+    *Values* and *base* are already ndarrays at this point.
+    """
+    if vals.ndim == 3:
+        log.debug("extracting class 1 from 3-D values", shape=vals.shape)
+        vals = vals[:, :, 1]
+    if base.ndim == 2:
+        log.debug("extracting class 1 from 2-D base_values", shape=base.shape)
+        base = base[:, 1]
+
+    return vals, base
+
+
+def _select_background(X: NDArray[Any], max_samples: int = 100) -> NDArray[Any]:
+    """Subsample *X* to at most *max_samples* rows, preserving 2-D shape."""
     if len(X) > max_samples:
         rng = np.random.RandomState(42)
         idx = rng.choice(len(X), max_samples, replace=False)
@@ -157,40 +238,6 @@ def _select_background(X: NDArray[Any], max_samples: int = 100) -> NDArray[Any]:
         return bg
     log.debug("background full dataset used", rows=len(X), shape=X.shape)
     return X
-
-
-def _save_waterfall(
-    shap_values: Any,
-    _feature_names: list[str],
-    _sample_index: int,
-    symbol: str,
-    image_storage: ImageStorage,
-) -> Path:
-    import shap
-
-    shap.plots.waterfall(shap_values[0], show=False)
-    buf = io.BytesIO()
-    plt.savefig(buf, format="png", bbox_inches="tight", dpi=100)
-    plt.close()
-    path = image_storage.save(symbol, buf.getvalue())
-    return path
-
-
-def _render_force_html(
-    shap_values: Any,
-    feature_names: list[str],
-) -> str:
-    import shap
-
-    html = shap.force_plot(
-        base_value=shap_values.base_values,
-        shap_values=shap_values.values,
-        features=shap_values.data,
-        feature_names=feature_names,
-        matplotlib=False,
-        show=False,
-    ).html()
-    return str(html)
 
 
 def _build_explainer(pipeline: Pipeline, X_bg: Any) -> tuple[Any, Any]:
@@ -214,21 +261,40 @@ def _build_explainer(pipeline: Pipeline, X_bg: Any) -> tuple[Any, Any]:
     raise ValueError(f"unsupported model type: {clf_name}")
 
 
-def _extract_binary(shap_values: Any) -> tuple[Any, Any]:
-    vals = shap_values.values
-    base = shap_values.base_values
+# ---------------------------------------------------------------------------
+# Plotting helpers (receive ``shap.Explanation`` objects)
+# ---------------------------------------------------------------------------
 
-    if isinstance(vals, list):
-        vals = vals[1]
-    if isinstance(vals, np.ndarray) and vals.ndim == 3:
-        vals = vals[:, :, 1]
 
-    if isinstance(base, list):
-        base = base[1]
-    if isinstance(base, np.ndarray) and base.ndim == 2:
-        base = base[:, 1]
+def _save_waterfall(
+    explanation: Any,
+    _feature_names: list[str],
+    _sample_index: int,
+    symbol: str,
+    image_storage: ImageStorage,
+) -> Path:
+    import shap
 
-    return np.asarray(vals, dtype=np.float64), base
+    shap.plots.waterfall(explanation[0], show=False)
+    buf = io.BytesIO()
+    plt.savefig(buf, format="png", bbox_inches="tight", dpi=100)
+    plt.close()
+    path = image_storage.save(symbol, buf.getvalue())
+    return path
+
+
+def _render_force_html(explanation: Any, feature_names: list[str]) -> str:
+    import shap
+
+    html = shap.force_plot(
+        base_value=explanation.base_values,
+        shap_values=explanation.values,
+        features=explanation.data,
+        feature_names=feature_names,
+        matplotlib=False,
+        show=False,
+    ).html()
+    return str(html)
 
 
 def _save_beeswarm(
@@ -249,11 +315,7 @@ def _save_beeswarm(
     return str(path)
 
 
-def _save_bar_plot(
-    explanation: Any,
-    symbol: str,
-    image_storage: ImageStorage,
-) -> str:
+def _save_bar_plot(explanation: Any, symbol: str, image_storage: ImageStorage) -> str:
     import shap
 
     shap.plots.bar(explanation, show=False)
