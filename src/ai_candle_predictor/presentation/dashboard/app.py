@@ -1582,6 +1582,7 @@ def _explain_global(symbol: str, model_name: str) -> None:
 
             st.session_state.shap_pipeline = pipeline
             st.session_state.shap_X = X
+            st.session_state.shap_feature_index = fdf.index
             st.session_state.shap_feature_names = feature_names
             st.session_state.shap_symbol = symbol
 
@@ -1593,13 +1594,17 @@ def _explain_local(symbol: str, _model_name: str) -> None:
     import pandas as pd
 
     from ai_candle_predictor.common.feature_utils import ensure_2d_features
+    from ai_candle_predictor.infrastructure.explainability.shap_analyzer import (
+        get_shap_position,
+    )
 
     pipeline = st.session_state.get("shap_pipeline")
     raw_X = st.session_state.get("shap_X")
+    feature_index = st.session_state.get("shap_feature_index")
     feature_names = st.session_state.get("shap_feature_names")
     shap_symbol = st.session_state.get("shap_symbol")
 
-    if pipeline is None or raw_X is None or feature_names is None:
+    if pipeline is None or raw_X is None or feature_names is None or feature_index is None:
         st.info("Run SHAP analysis first from the Global Explanations tab.")
         return
 
@@ -1609,23 +1614,7 @@ def _explain_local(symbol: str, _model_name: str) -> None:
 
     X = ensure_2d_features(raw_X, name="shap_X")
 
-    from ai_candle_predictor.domain.value_objects.symbol import Symbol
-    from ai_candle_predictor.infrastructure.persistence.parquet_store import ParquetStore
-
-    ps = ParquetStore()
-    sym = Symbol(symbol)
-    full_data = list(ps.load(sym))
-    if not full_data:
-        st.warning("No candle data for date mapping.")
-        return
-
-    dates = sorted({c.timestamp for c in full_data})
-    if len(dates) > len(X):
-        dates = dates[-len(X) :]
-
-    if not dates:
-        st.warning("No dates available.")
-        return
+    dates = sorted(feature_index)
 
     available_range = st.selectbox(
         "Select Date",
@@ -1637,7 +1626,14 @@ def _explain_local(symbol: str, _model_name: str) -> None:
     if available_range is None:
         return
 
-    sample_idx = len(dates) - 1 - dates[::-1].index(available_range)
+    try:
+        sample_idx = get_shap_position(feature_index, available_range, len(X))
+    except KeyError:
+        st.error(f"Selected date {available_range} not found in the feature matrix.")
+        return
+    except IndexError as e:
+        st.error(f"SHAP position out of bounds: {e}")
+        return
 
     if st.button("Explain Prediction", type="primary"):
         from ai_candle_predictor.infrastructure.explainability.shap_analyzer import (

@@ -8,6 +8,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 from numpy.typing import NDArray
+from pandas import Index as PdIndex
 from sklearn.pipeline import Pipeline
 
 from ai_candle_predictor.application.ports.image_storage import ImageStorage
@@ -30,6 +31,53 @@ def check_shap() -> None:
     """Raise RuntimeError with install instructions if SHAP is unavailable."""
     if not _SHAP_AVAILABLE:
         raise RuntimeError("SHAP is not installed.  Run: uv add shap")
+
+
+def get_shap_position(
+    feature_index: PdIndex,
+    timestamp: Any,
+    n_samples: int,
+) -> int:
+    """Convert a DataFrame timestamp label to a 0-based positional index for SHAP arrays.
+
+    Parameters
+    ----------
+    feature_index : pd.Index
+        The index of the feature matrix DataFrame (from ``_pivot_features``).
+    timestamp : Any
+        The timestamp label to look up (must exist in *feature_index*).
+    n_samples : int
+        Number of rows in the SHAP values array (``X.shape[0]``).
+
+    Returns
+    -------
+    int
+        0-based positional index into the SHAP values array.
+
+    Raises
+    ------
+    KeyError
+        If *timestamp* is not found in *feature_index*.
+    IndexError
+        If the resolved position is outside ``[0, n_samples)``.
+    """
+    raw: Any = feature_index.get_loc(timestamp)
+
+    if isinstance(raw, slice):
+        pos: int = raw.start
+    elif isinstance(raw, (np.ndarray, list)):
+        pos = int(raw[0])
+    else:
+        pos = int(raw)
+
+    if not 0 <= pos < n_samples:
+        raise IndexError(
+            f"SHAP position {pos} out of bounds for array of size {n_samples}. "
+            f"Feature index has {len(feature_index)} entries, "
+            f"SHAP values have {n_samples} samples."
+        )
+
+    return pos
 
 
 # ---------------------------------------------------------------------------
